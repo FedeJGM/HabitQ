@@ -1,0 +1,19 @@
+.atl/
+
+# Shared secrets (Google client ID, JWT secret, DB URL)
+.env
+
+# Backend (Python)
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+
+# Mobile (Flutter)
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/build/
+mobile/android/local.properties
+mobile/android/.gradle/
+mobile/android/app/debug.keystore
