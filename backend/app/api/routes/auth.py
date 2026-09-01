@@ -5,7 +5,7 @@ from app.api.deps import get_current_user, get_db
 from app.core.security import create_access_token
 from app.models.user import User
 from app.schemas.auth import GoogleAuthRequest, TokenResponse, UserOut
-from app.services.auth_service import get_or_create_user
+from app.services.auth_service import get_or_create_user, mark_onboarding_completed
 from app.services.google_auth import InvalidGoogleTokenError, verify_google_id_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -32,3 +32,12 @@ def login_with_google(payload: GoogleAuthRequest, db: Session = Depends(get_db))
 @router.get("/me", response_model=UserOut)
 def read_current_user(current_user: User = Depends(get_current_user)) -> UserOut:
     return UserOut.model_validate(current_user)
+
+
+@router.post("/onboarding-complete", response_model=UserOut)
+def complete_onboarding(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    user = mark_onboarding_completed(db, current_user)
+    return UserOut.model_validate(user)

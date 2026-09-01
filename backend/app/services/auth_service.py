@@ -13,3 +13,10 @@ def get_or_create_user(db: Session, *, google_id: str, email: str, name: str) ->
     db.commit()
     db.refresh(user)
     return user
+
+
+def mark_onboarding_completed(db: Session, user: User) -> User:
+    user.onboarding_completed = True
+    db.commit()
+    db.refresh(user)
+    return user

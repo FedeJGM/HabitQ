@@ -4,6 +4,7 @@ import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../habits/habits_service.dart';
+import 'onboarding_service.dart';
 
 class _HabitOption {
   const _HabitOption(this.value, this.label);
@@ -161,9 +162,10 @@ const _sections = [
 /// Per-domain habit questions step of onboarding, following the perfil
 /// básico step. Answers become one habit_records row each via POST /habits.
 class OnboardingHabitsScreen extends StatefulWidget {
-  const OnboardingHabitsScreen({super.key, this.habitsService});
+  const OnboardingHabitsScreen({super.key, this.habitsService, this.onboardingService});
 
   final HabitsService? habitsService;
+  final OnboardingService? onboardingService;
 
   @override
   State<OnboardingHabitsScreen> createState() => _OnboardingHabitsScreenState();
@@ -171,6 +173,7 @@ class OnboardingHabitsScreen extends StatefulWidget {
 
 class _OnboardingHabitsScreenState extends State<OnboardingHabitsScreen> {
   late final HabitsService _habitsService;
+  late final OnboardingService _onboardingService;
   final Map<String, String> _answers = {};
   bool _isSaving = false;
   String? _errorMessage;
@@ -182,6 +185,7 @@ class _OnboardingHabitsScreenState extends State<OnboardingHabitsScreen> {
   void initState() {
     super.initState();
     _habitsService = widget.habitsService ?? HabitsService();
+    _onboardingService = widget.onboardingService ?? OnboardingService();
   }
 
   Future<void> _handleContinue() async {
@@ -206,6 +210,7 @@ class _OnboardingHabitsScreenState extends State<OnboardingHabitsScreen> {
             ),
       ];
       await _habitsService.submitAnswers(answers);
+      await _onboardingService.completeOnboarding();
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed(AppRoutes.home);
     } on ApiException catch (e) {

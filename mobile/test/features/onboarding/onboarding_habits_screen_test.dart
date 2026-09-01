@@ -4,6 +4,7 @@ import 'package:mobile/app_routes.dart';
 import 'package:mobile/core/networking/api_client.dart';
 import 'package:mobile/features/habits/habits_service.dart';
 import 'package:mobile/features/onboarding/onboarding_habits_screen.dart';
+import 'package:mobile/features/onboarding/onboarding_service.dart';
 
 class _FakeHabitsService implements HabitsService {
   _FakeHabitsService({this.error});
@@ -18,13 +19,29 @@ class _FakeHabitsService implements HabitsService {
   }
 }
 
+class _FakeOnboardingService implements OnboardingService {
+  _FakeOnboardingService({this.error});
+
+  ApiException? error;
+  bool completeCalled = false;
+
+  @override
+  Future<void> completeOnboarding() async {
+    completeCalled = true;
+    if (error != null) throw error!;
+  }
+}
+
 void main() {
-  Widget buildApp(HabitsService habitsService) {
+  Widget buildApp(HabitsService habitsService, OnboardingService onboardingService) {
     return MaterialApp(
       routes: {
         AppRoutes.home: (_) => const Scaffold(body: Text('Home')),
       },
-      home: OnboardingHabitsScreen(habitsService: habitsService),
+      home: OnboardingHabitsScreen(
+        habitsService: habitsService,
+        onboardingService: onboardingService,
+      ),
     );
   }
 
@@ -56,39 +73,59 @@ void main() {
   }
 
   testWidgets('shows a validation message when not all questions are answered', (tester) async {
-    final fakeService = _FakeHabitsService();
-    await tester.pumpWidget(buildApp(fakeService));
+    final fakeHabits = _FakeHabitsService();
+    final fakeOnboarding = _FakeOnboardingService();
+    await tester.pumpWidget(buildApp(fakeHabits, fakeOnboarding));
 
     await tapVisible(tester, find.text('Finalizar'));
 
     expect(find.text('Responde todas las preguntas para continuar.'), findsOneWidget);
-    expect(fakeService.capturedAnswers, isNull);
+    expect(fakeHabits.capturedAnswers, isNull);
+    expect(fakeOnboarding.completeCalled, isFalse);
   });
 
-  testWidgets('submits all 9 answers and navigates to home on success', (tester) async {
-    final fakeService = _FakeHabitsService();
-    await tester.pumpWidget(buildApp(fakeService));
+  testWidgets('submits answers, completes onboarding, and navigates to home', (tester) async {
+    final fakeHabits = _FakeHabitsService();
+    final fakeOnboarding = _FakeOnboardingService();
+    await tester.pumpWidget(buildApp(fakeHabits, fakeOnboarding));
 
     await answerAll(tester);
     await tapVisible(tester, find.text('Finalizar'));
     await tester.pumpAndSettle();
 
-    expect(fakeService.capturedAnswers, hasLength(9));
+    expect(fakeHabits.capturedAnswers, hasLength(9));
     final sleepAnswer =
-        fakeService.capturedAnswers!.firstWhere((a) => a.key == 'hours');
+        fakeHabits.capturedAnswers!.firstWhere((a) => a.key == 'hours');
     expect(sleepAnswer.domain, 'sleep');
     expect(sleepAnswer.value, 'less_5');
+    expect(fakeOnboarding.completeCalled, isTrue);
     expect(find.text('Home'), findsOneWidget);
   });
 
-  testWidgets('shows the backend error message on failure', (tester) async {
-    final fakeService = _FakeHabitsService(error: ApiException('Ocurrió un error inesperado.'));
-    await tester.pumpWidget(buildApp(fakeService));
+  testWidgets('shows the backend error message when submitting habits fails', (tester) async {
+    final fakeHabits = _FakeHabitsService(error: ApiException('Ocurrió un error inesperado.'));
+    final fakeOnboarding = _FakeOnboardingService();
+    await tester.pumpWidget(buildApp(fakeHabits, fakeOnboarding));
 
     await answerAll(tester);
     await tapVisible(tester, find.text('Finalizar'));
     await tester.pumpAndSettle();
 
     expect(find.text('Ocurrió un error inesperado.'), findsOneWidget);
+    expect(fakeOnboarding.completeCalled, isFalse);
+  });
+
+  testWidgets('shows the backend error message when completing onboarding fails', (tester) async {
+    final fakeHabits = _FakeHabitsService();
+    final fakeOnboarding =
+        _FakeOnboardingService(error: ApiException('No se pudo completar el onboarding.'));
+    await tester.pumpWidget(buildApp(fakeHabits, fakeOnboarding));
+
+    await answerAll(tester);
+    await tapVisible(tester, find.text('Finalizar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No se pudo completar el onboarding.'), findsOneWidget);
+    expect(find.text('Home'), findsNothing);
   });
 }

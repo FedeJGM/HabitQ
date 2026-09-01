@@ -96,3 +96,37 @@ def test_me_returns_current_user_for_valid_token() -> None:
     body = response.json()
     assert body["email"] == "test@example.com"
     assert body["id"] == str(user.id)
+
+
+class _FakeCommitDb:
+    def commit(self) -> None:
+        pass
+
+    def refresh(self, obj) -> None:
+        pass
+
+
+def test_complete_onboarding_requires_auth() -> None:
+    response = client.post("/auth/onboarding-complete")
+    assert response.status_code == 401
+
+
+def test_complete_onboarding_marks_user_as_completed() -> None:
+    user = User(
+        id=uuid.uuid4(),
+        google_id="g-123",
+        email="test@example.com",
+        name="Test User",
+        onboarding_completed=False,
+    )
+    app.dependency_overrides[deps.get_current_user] = lambda: user
+    app.dependency_overrides[deps.get_db] = lambda: _FakeCommitDb()
+    try:
+        response = client.post("/auth/onboarding-complete")
+    finally:
+        app.dependency_overrides.pop(deps.get_current_user, None)
+        app.dependency_overrides.pop(deps.get_db, None)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["onboarding_completed"] is True
+    assert user.onboarding_completed is True
