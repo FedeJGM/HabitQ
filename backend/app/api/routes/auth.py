@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_current_user, get_db
 from app.core.security import create_access_token
+from app.models.user import User
 from app.schemas.auth import GoogleAuthRequest, TokenResponse, UserOut
 from app.services.auth_service import get_or_create_user
 from app.services.google_auth import InvalidGoogleTokenError, verify_google_id_token
@@ -26,3 +27,8 @@ def login_with_google(payload: GoogleAuthRequest, db: Session = Depends(get_db))
 
     access_token = create_access_token(user.id)
     return TokenResponse(access_token=access_token, user=UserOut.model_validate(user))
+
+
+@router.get("/me", response_model=UserOut)
+def read_current_user(current_user: User = Depends(get_current_user)) -> UserOut:
+    return UserOut.model_validate(current_user)
