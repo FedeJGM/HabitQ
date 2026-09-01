@@ -41,3 +41,17 @@ def complete_onboarding(
 ) -> UserOut:
     user = mark_onboarding_completed(db, current_user)
     return UserOut.model_validate(user)
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_token(current_user: User = Depends(get_current_user)) -> TokenResponse:
+    access_token = create_access_token(current_user.id)
+    return TokenResponse(access_token=access_token, user=UserOut.model_validate(current_user))
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(current_user: User = Depends(get_current_user)) -> None:
+    # Stateless JWT with no revocation store (plan's data model has none):
+    # this only requires a still-valid token, it does not invalidate it.
+    # The client is responsible for discarding the token locally.
+    return None

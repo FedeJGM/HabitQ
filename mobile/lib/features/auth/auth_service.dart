@@ -69,6 +69,16 @@ class AuthService extends ChangeNotifier {
     return HabitQUser.fromJson(response);
   }
 
-  /// Discards the stored HabitQ JWT. Stateless JWTs need no backend call.
-  Future<void> signOut() => _secureStorage.delete(key: _tokenKey);
+  /// Best-effort POST /auth/logout, then discards the stored HabitQ JWT
+  /// regardless of the backend call's outcome — logging out must not get
+  /// stuck on a network error, and the JWT is stateless so the backend has
+  /// no way to force it invalid anyway.
+  Future<void> signOut() async {
+    try {
+      await _apiClient.post('/auth/logout', const {});
+    } on ApiException {
+      // Ignored: local sign-out proceeds either way.
+    }
+    await _secureStorage.delete(key: _tokenKey);
+  }
 }

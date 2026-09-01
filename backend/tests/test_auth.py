@@ -1,5 +1,6 @@
 import uuid
 
+import jwt
 from fastapi.testclient import TestClient
 
 from app.api import deps
@@ -130,3 +131,50 @@ def test_complete_onboarding_marks_user_as_completed() -> None:
     body = response.json()
     assert body["onboarding_completed"] is True
     assert user.onboarding_completed is True
+
+
+def test_refresh_requires_auth() -> None:
+    response = client.post("/auth/refresh")
+    assert response.status_code == 401
+
+
+def test_refresh_returns_a_new_token_for_the_current_user() -> None:
+    user = User(
+        id=uuid.uuid4(),
+        google_id="g-123",
+        email="test@example.com",
+        name="Test User",
+        onboarding_completed=True,
+    )
+    app.dependency_overrides[deps.get_current_user] = lambda: user
+    try:
+        response = client.post("/auth/refresh")
+    finally:
+        app.dependency_overrides.pop(deps.get_current_user, None)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["user"]["id"] == str(user.id)
+    decoded = jwt.decode(body["access_token"], options={"verify_signature": False})
+    assert decoded["sub"] == str(user.id)
+
+
+def test_logout_requires_auth() -> None:
+    response = client.post("/auth/logout")
+    assert response.status_code == 401
+
+
+def test_logout_returns_no_content_for_the_current_user() -> None:
+    user = User(
+        id=uuid.uuid4(),
+        google_id="g-123",
+        email="test@example.com",
+        name="Test User",
+        onboarding_completed=True,
+    )
+    app.dependency_overrides[deps.get_current_user] = lambda: user
+    try:
+        response = client.post("/auth/logout")
+    finally:
+        app.dependency_overrides.pop(deps.get_current_user, None)
+    assert response.status_code == 204
+    assert response.content == b""
