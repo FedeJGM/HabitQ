@@ -58,7 +58,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         mainGoal: _selectedGoal!,
       );
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+      Navigator.of(context).pushReplacementNamed(AppRoutes.onboardingHabits);
     } on ApiException catch (e) {
       setState(() => _errorMessage = e.message);
     } finally {

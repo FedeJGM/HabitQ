@@ -25,7 +25,7 @@ void main() {
   Widget buildApp(ProfileService profileService) {
     return MaterialApp(
       routes: {
-        AppRoutes.home: (_) => const Scaffold(body: Text('Home')),
+        AppRoutes.onboardingHabits: (_) => const Scaffold(body: Text('Habits')),
       },
       home: OnboardingScreen(profileService: profileService),
     );
@@ -42,7 +42,7 @@ void main() {
     expect(fakeService.capturedAgeRange, isNull);
   });
 
-  testWidgets('saves the profile and navigates to home on success', (tester) async {
+  testWidgets('saves the profile and navigates to the habit questions step on success', (tester) async {
     final fakeService = _FakeProfileService();
     await tester.pumpWidget(buildApp(fakeService));
 
@@ -55,7 +55,7 @@ void main() {
 
     expect(fakeService.capturedAgeRange, '25-34');
     expect(fakeService.capturedMainGoal, 'sleep_better');
-    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Habits'), findsOneWidget);
   });
 
   testWidgets('shows the backend error message on failure', (tester) async {
