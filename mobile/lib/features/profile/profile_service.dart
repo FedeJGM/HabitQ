@@ -36,4 +36,9 @@ class ProfileService {
     });
     return UserProfile.fromJson(response);
   }
+
+  Future<UserProfile> getProfile() async {
+    final response = await _apiClient.get('/profile');
+    return UserProfile.fromJson(response);
+  }
 }

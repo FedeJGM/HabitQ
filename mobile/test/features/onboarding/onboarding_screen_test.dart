@@ -19,6 +19,11 @@ class _FakeProfileService implements ProfileService {
     if (error != null) throw error!;
     return UserProfile(id: 'p1', userId: 'u1', ageRange: ageRange, mainGoal: mainGoal);
   }
+
+  @override
+  Future<UserProfile> getProfile() {
+    throw UnimplementedError();
+  }
 }
 
 void main() {

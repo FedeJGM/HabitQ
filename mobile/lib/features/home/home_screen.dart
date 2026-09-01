@@ -97,9 +97,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const _ComingSoonCard(
-                icon: Icons.person_outline,
-                title: 'Perfil',
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.person_outline, color: AppColors.primary),
+                  title: const Text('Perfil'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).pushNamed(AppRoutes.profile),
+                ),
               ),
             ],
           ),

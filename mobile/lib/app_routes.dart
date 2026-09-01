@@ -5,6 +5,7 @@ import 'features/habits/habits_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/onboarding/onboarding_habits_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
+import 'features/profile/profile_screen.dart';
 
 /// Central route table. Add new named routes here as each feature screen
 /// lands, instead of scattering Navigator.push calls with inline builders.
@@ -14,6 +15,7 @@ class AppRoutes {
   static const onboardingHabits = '/onboarding/habits';
   static const home = '/home';
   static const habits = '/habits';
+  static const profile = '/profile';
 
   static Map<String, WidgetBuilder> get table => {
         login: (_) => const LoginScreen(),
@@ -21,5 +23,6 @@ class AppRoutes {
         onboardingHabits: (_) => const OnboardingHabitsScreen(),
         home: (_) => const HomeScreen(),
         habits: (_) => const HabitsScreen(),
+        profile: (_) => const ProfileScreen(),
       };
 }

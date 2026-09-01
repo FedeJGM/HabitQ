@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../profile/profile_options.dart';
 import '../profile/profile_service.dart';
 
 /// Perfil básico step of onboarding (plan section 11): age range + main
@@ -18,17 +19,6 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  static const _ageRanges = ['18-24', '25-34', '35-44', '45-54', '55+'];
-
-  static const _goals = {
-    'sleep_better': 'Dormir mejor',
-    'eat_better': 'Alimentarme mejor',
-    'move_more': 'Moverme más',
-    'hydrate_more': 'Hidratarme mejor',
-    'reduce_screen_time': 'Reducir el uso de pantallas',
-    'manage_stress': 'Manejar mejor el estrés',
-  };
-
   late final ProfileService _profileService;
   String? _selectedAgeRange;
   String? _selectedGoal;
@@ -80,11 +70,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
-                children: _ageRanges.map((range) {
+                children: ageRangeOptions.map((option) {
                   return ChoiceChip(
-                    label: Text(range),
-                    selected: _selectedAgeRange == range,
-                    onSelected: (_) => setState(() => _selectedAgeRange = range),
+                    label: Text(option.label),
+                    selected: _selectedAgeRange == option.value,
+                    onSelected: (_) => setState(() => _selectedAgeRange = option.value),
                   );
                 }).toList(),
               ),
@@ -97,11 +87,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _goals.entries.map((entry) {
+                children: mainGoalOptions.map((option) {
                   return ChoiceChip(
-                    label: Text(entry.value),
-                    selected: _selectedGoal == entry.key,
-                    onSelected: (_) => setState(() => _selectedGoal = entry.key),
+                    label: Text(option.label),
+                    selected: _selectedGoal == option.value,
+                    onSelected: (_) => setState(() => _selectedGoal = option.value),
                   );
                 }).toList(),
               ),
