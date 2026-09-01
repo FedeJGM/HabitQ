@@ -4,16 +4,18 @@ Aplicación móvil de proyecto de grado — orientación personalizada de hábit
 
 ## Alcance actual
 
-**Backend (FastAPI)** — `POST /auth/google`, `GET /auth/me`, `POST /auth/onboarding-complete`, `GET/PUT /profile`, `GET/POST /habits`, `PUT /habits/{id}`. Todos los endpoints privados exigen JWT válido (`get_current_user`).
+Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) (arquitectura y tabla de endpoints), [`docs/requirements/use-cases.md`](./docs/requirements/use-cases.md) (casos de uso) y [`docs/decisions.md`](./docs/decisions.md) (decisiones no explícitas en el plan).
+
+**Backend (FastAPI)** — `POST /auth/google`, `GET /auth/me`, `POST /auth/onboarding-complete`, `POST /auth/refresh`, `POST /auth/logout`, `GET/PUT /profile`, `GET/POST /habits`, `PUT /habits/{id}`. Todos los endpoints privados exigen JWT válido (`get_current_user`).
 
 **Mobile (Flutter)**
-- Login con Google.
+- Login con Google + consentimiento inicial (una vez por dispositivo, guardado localmente).
 - Onboarding: perfil básico (edad + objetivo principal) + cuestionario de 9 preguntas por los 6 dominios de hábitos.
 - Home: saludo, cerrar sesión, navegación a Mis Hábitos y Perfil.
 - Mis Hábitos: ver y editar los hábitos ya registrados (autosave).
 - Perfil: ver y editar edad y objetivo principal (autosave).
 
-**Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): consentimiento inicial, Chat con HabitQ y RAG (ingesta de PDFs, embeddings, pgvector, Gemini), historial de conversaciones, `POST /auth/refresh` y `POST /auth/logout` en el backend.
+**Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): Chat con HabitQ y RAG (ingesta de PDFs, embeddings, pgvector, Gemini), historial de conversaciones. Mobile todavía no llama a `POST /auth/refresh` (el endpoint existe, falta el interceptor que lo dispare automáticamente).
 
 > **Nota de alcance (Login):** el boceto de Figma (`Diseño/Inicio de sesión.png`) incluye un formulario de correo/contraseña. El plan (secciones 2, 3, 10, 20) excluye explícitamente el login tradicional del MVP — solo Google Sign-In. La pantalla implementada usa **solo Google**, adaptando el boceto (sin campos de correo/contraseña ni link de registro).
 >
