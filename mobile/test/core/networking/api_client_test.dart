@@ -83,5 +83,43 @@ void main() {
 
       await expectLater(apiClient.get('/profile'), throwsA(isA<ApiException>()));
     });
+
+    test('getList attaches the Authorization header and returns a JSON array', () async {
+      http.Request? capturedRequest;
+      final mockClient = MockClient((request) async {
+        capturedRequest = request;
+        return http.Response(
+          jsonEncode([
+            {'domain': 'sleep', 'key': 'hours', 'value': '7_8'},
+          ]),
+          200,
+        );
+      });
+
+      final apiClient = ApiClient(client: mockClient, tokenProvider: () async => 'fake-jwt');
+
+      final result = await apiClient.getList('/habits');
+
+      expect(capturedRequest!.headers['Authorization'], 'Bearer fake-jwt');
+      expect(capturedRequest!.method, 'GET');
+      expect(result, [
+        {'domain': 'sleep', 'key': 'hours', 'value': '7_8'},
+      ]);
+    });
+
+    test('getList throws ApiException with the backend detail on error status', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response(jsonEncode({'detail': 'Not authenticated'}), 401);
+      });
+
+      final apiClient = ApiClient(client: mockClient, tokenProvider: () async => null);
+
+      await expectLater(
+        apiClient.getList('/habits'),
+        throwsA(
+          isA<ApiException>().having((e) => e.message, 'message', 'Not authenticated'),
+        ),
+      );
+    });
   });
 }

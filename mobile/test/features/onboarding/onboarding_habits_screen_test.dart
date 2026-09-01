@@ -17,6 +17,21 @@ class _FakeHabitsService implements HabitsService {
     capturedAnswers = answers;
     if (error != null) throw error!;
   }
+
+  @override
+  Future<List<HabitRecord>> fetchHabits() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<HabitRecord> updateHabit({
+    required String id,
+    required String domain,
+    required String key,
+    required String value,
+  }) {
+    throw UnimplementedError();
+  }
 }
 
 class _FakeOnboardingService implements OnboardingService {

@@ -88,9 +88,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: 'Chat con HabitQ',
               ),
               const SizedBox(height: 12),
-              const _ComingSoonCard(
-                icon: Icons.checklist,
-                title: 'Mis hábitos',
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.checklist, color: AppColors.primary),
+                  title: const Text('Mis hábitos'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).pushNamed(AppRoutes.habits),
+                ),
               ),
               const SizedBox(height: 12),
               const _ComingSoonCard(

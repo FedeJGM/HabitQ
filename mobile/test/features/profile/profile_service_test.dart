@@ -29,6 +29,11 @@ class _FakeApiClient implements ApiClient {
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) {
     throw UnimplementedError();
   }
+
+  @override
+  Future<List<dynamic>> getList(String path) {
+    throw UnimplementedError();
+  }
 }
 
 void main() {

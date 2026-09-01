@@ -49,6 +49,14 @@ class ApiClient {
     return _decode(response);
   }
 
+  Future<List<dynamic>> getList(String path) async {
+    final response = await _send(() async {
+      final headers = await _headers();
+      return _client.get(_uri(path), headers: headers).timeout(const Duration(seconds: 15));
+    });
+    return _decodeList(response);
+  }
+
   Future<http.Response> _send(Future<http.Response> Function() request) async {
     try {
       return await request();
@@ -79,5 +87,17 @@ class ApiClient {
     }
 
     return decoded;
+  }
+
+  List<dynamic> _decodeList(http.Response response) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final decoded = response.body.isEmpty
+          ? <String, dynamic>{}
+          : jsonDecode(response.body) as Map<String, dynamic>;
+      final detail = decoded['detail'];
+      throw ApiException(detail is String ? detail : 'Ocurrió un error inesperado.');
+    }
+
+    return response.body.isEmpty ? <dynamic>[] : jsonDecode(response.body) as List<dynamic>;
   }
 }
