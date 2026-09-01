@@ -11,3 +11,5 @@ httpx
 pyjwt
 google-auth
 requests
+pymupdf
+sentence-transformers
