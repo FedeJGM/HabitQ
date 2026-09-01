@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_routes.dart';
 import '../../core/theme/app_theme.dart';
+import '../consent/consent_storage.dart';
 import 'auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -13,6 +14,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   late final AuthService _authService;
+  final _consentStorage = const ConsentStorage();
   String? _errorMessage;
 
   @override
@@ -34,9 +36,15 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final user = await _authService.signInWithGoogle();
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed(
-        user.onboardingCompleted ? AppRoutes.home : AppRoutes.onboarding,
-      );
+      final nextRoute = user.onboardingCompleted ? AppRoutes.home : AppRoutes.onboarding;
+      final hasConsented = await _consentStorage.hasAccepted();
+      if (!mounted) return;
+      if (hasConsented) {
+        Navigator.of(context).pushReplacementNamed(nextRoute);
+      } else {
+        Navigator.of(context)
+            .pushReplacementNamed(AppRoutes.consent, arguments: nextRoute);
+      }
     } on AuthFailure catch (e) {
       setState(() => _errorMessage = e.message);
     }
