@@ -26,6 +26,7 @@ habitq/
 ├── mobile/     # Flutter (Persona 1)
 ├── backend/    # FastAPI (Persona 2)
 ├── Diseño/     # Bocetos de Figma exportados (PNG)
+├── docs/       # Arquitectura, diagramas, casos de uso, decisiones — ver docs/architecture/overview.md
 ├── .env.example  # Config compartida (ver abajo)
 └── HABITQ_DEVELOPMENT_PLAN.md
 ```
