@@ -62,4 +62,13 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Fetches the authenticated user from the backend (GET /auth/me).
+  Future<HabitQUser> fetchCurrentUser() async {
+    final response = await _apiClient.get('/auth/me');
+    return HabitQUser.fromJson(response);
+  }
+
+  /// Discards the stored HabitQ JWT. Stateless JWTs need no backend call.
+  Future<void> signOut() => _secureStorage.delete(key: _tokenKey);
 }
