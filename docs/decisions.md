@@ -119,3 +119,17 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Decisión, con evidencia empírica:** se probó que una llamada real a `FlutterSecureStorage` sin mock, ejecutada dentro de un `testWidgets()`, **cuelga el test indefinidamente** (no lanza excepción). Por eso ninguno de estos tres componentes tiene un test unitario que ejercite su cuerpo real — se verifican indirectamente a través de los fakes que las pantallas que los consumen inyectan por constructor.
 
 **Consecuencias para el equipo:** cualquier código nuevo que use `FlutterSecureStorage` directamente debe seguir el mismo patrón de inyección (parámetro opcional en el constructor con fallback a la instancia real) para permanecer testeable — nunca ejercitar la ruta real dentro de un test.
+
+---
+
+## D-12 — Chunking usa el tokenizer real del modelo de embeddings, no una aproximación
+
+**Contexto:** el plan (sección 12) define los límites de chunking en tokens (800-1200, overlap 100-150), pero no especifica cómo contar "tokens" — la opción más simple habría sido aproximar por palabras, o agregar una librería de tokenización nueva (ej. `tiktoken`, pensada para modelos OpenAI).
+
+**Decisión:** `chunk_text` (`backend/app/services/ingestion_service.py`) recibe un `tokenize: Callable[[str], list]` inyectado. En producción, `ingest_document` le pasa `model.tokenizer.encode` — el tokenizer real de `sentence-transformers` (`all-MiniLM-L6-v2`), que ya está disponible sin instalar nada adicional.
+
+**Justificación:** los límites de chunk deben corresponder al tokenizer que realmente va a procesar ese texto al generar el embedding — una aproximación por palabras o un tokenizer de otro modelo (`tiktoken`/OpenAI) puede desviarse significativamente del conteo real, sub- o sobre-llenando chunks respecto al límite de contexto del modelo.
+
+**Cómo se cuenta sin decodificar:** en vez de tokenizar el texto completo y decodificar cada ventana de vuelta a texto (lo cual con un tokenizer WordPiece no reconstruye el texto original de forma confiable), se tokeniza cada palabra por separado una sola vez y se usa la suma acumulada de esos conteos para decidir los límites de cada chunk sobre el texto partido por palabras (`text.split()`). El chunk resultante se reconstruye con `" ".join(...)`, siempre exacto. Es una aproximación (ignora que un tokenizer subword puede fusionar tokens en los bordes entre palabras), aceptable para un límite de tamaño de chunk, no para un conteo exacto.
+
+**Testing:** los tests de `chunk_text` inyectan un fake (`str.split` aplicado por palabra) en vez de cargar el modelo real — evita lentitud y dependencia de red en la suite.
