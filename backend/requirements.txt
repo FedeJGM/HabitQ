@@ -13,3 +13,4 @@ google-auth
 requests
 pymupdf
 sentence-transformers
+google-genai

@@ -147,3 +147,15 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Limpieza en el camino:** `AuthService` tenía su propia instancia de `FlutterSecureStorage` y una constante `_tokenKey` duplicada con `TokenStorage.key` (el comentario en `token_storage.dart` ya advertía "must stay in sync"). Se unificó: `AuthService` ahora recibe un `TokenStorage` inyectable (mismo patrón de D-11) y usa sus métodos `read()`/`write()`/`delete()` en vez de tocar `FlutterSecureStorage` directamente.
 
 **Testing:** siguiendo D-11, ningún test ejercita `FlutterSecureStorage` real. Los fakes (`_FakeTokenStorage implements TokenStorage`, mismo patrón que `_FakeApiClient implements ApiClient`) solo necesitan implementar `read()`/`write()`/`delete()` — los miembros privados de `TokenStorage` no forman parte de la interfaz que Dart exige implementar. Se confirmó empíricamente que la llamada fire-and-forget a `refreshTokenIfNeeded()` en `initState()` de `HabitQApp`, incluso con el `AuthService()` real por default, no cuelga el widget test existente (`widget_test.dart`) — a diferencia del caso descrito en D-11, acá nunca se espera (`await`) esa llamada desde el widget.
+
+---
+
+## D-14 — Nombre de modelo Gemini: usar el alias `gemini-flash-latest`, no una versión fija
+
+**Contexto:** al integrar `google-genai` (2026-09-02) para el servicio de LLM (`backend/app/services/llm_service.py`), el nombre de modelo que aparecía en ejemplos/documentación al momento de escribir el código (`gemini-2.0-flash`) ya no existe — la API devuelve 404 y sugiere migrar a un modelo más nuevo. Probar `gemini-2.5-flash` tampoco funcionó: 404, "no longer available to new users" (la API key de este proyecto es nueva). Los modelos de Google evolucionan más rápido de lo que cualquier nombre fijo escrito en código puede seguir.
+
+**Decisión:** usar el alias `gemini-flash-latest` (no una versión numerada como `gemini-3.6-flash` o similar) como `_MODEL` en `llm_service.py`. Google mantiene este alias apuntando siempre al modelo flash estable más reciente disponible para la cuenta — evita que el código se rompa cada vez que Google retira una versión.
+
+**Nota sobre errores 503 ("high demand"):** son transitorios y esperables en el tier gratuito — no indican un problema de código, config o de la API key. Se confirmó reintentando: la misma llamada que falló 3 veces seguidas funcionó al reintentar. `generate_answer` (P2-3) no implementa retry/backoff todavía — es un ítem separado y explícito del roadmap ("manejo errores Gemini", Fase 4), no de este paso.
+
+**Cómo verificar el modelo correcto en el futuro** (si `gemini-flash-latest` alguna vez deja de existir): `client.models.list()` filtrando por `'generateContent' in m.supported_actions` devuelve los modelos realmente disponibles para esa API key — más confiable que cualquier nombre hardcodeado en documentación o en este archivo.

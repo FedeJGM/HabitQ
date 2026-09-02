@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = 60 * 24
+    gemini_api_key: str
 
     model_config = SettingsConfigDict(
         env_file=str(_REPO_ROOT_ENV),
