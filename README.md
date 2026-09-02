@@ -15,7 +15,9 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 - Mis Hábitos: ver y editar los hábitos ya registrados (autosave).
 - Perfil: ver y editar edad y objetivo principal (autosave).
 
-**Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): Chat con HabitQ y RAG (ingesta de PDFs, embeddings, pgvector, Gemini), historial de conversaciones. Mobile todavía no llama a `POST /auth/refresh` (el endpoint existe, falta el interceptor que lo dispare automáticamente).
+**Ingesta RAG** — pipeline PDF → texto → limpieza → chunking → embeddings → Postgres, implementado y verificado contra Postgres real con 2 documentos de ejemplo (ver [`ingestion/README.md`](./ingestion/README.md) y [`docs/rag-chat-progress.md`](./docs/rag-chat-progress.md)). `pgvector` no está disponible en el entorno de desarrollo — los embeddings se guardan como `ARRAY(FLOAT)` con similitud coseno en Python (ver `docs/decisions.md`, D-12).
+
+**Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): retrieval real sobre los embeddings ya ingeridos, integración con Gemini, `POST /chat`, tablas `conversations`/`messages`, Chat UI y historial de conversaciones.
 
 > **Nota de alcance (Login):** el boceto de Figma (`Diseño/Inicio de sesión.png`) incluye un formulario de correo/contraseña. El plan (secciones 2, 3, 10, 20) excluye explícitamente el login tradicional del MVP — solo Google Sign-In. La pantalla implementada usa **solo Google**, adaptando el boceto (sin campos de correo/contraseña ni link de registro).
 >
@@ -27,6 +29,7 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 habitq/
 ├── mobile/     # Flutter (Persona 1)
 ├── backend/    # FastAPI (Persona 2)
+├── ingestion/  # PDFs de fuentes científicas + script de ingesta RAG (ver ingestion/README.md)
 ├── Diseño/     # Bocetos de Figma exportados (PNG)
 ├── docs/       # Arquitectura, diagramas, casos de uso, decisiones — ver docs/architecture/overview.md
 ├── .env.example  # Config compartida (ver abajo)
@@ -109,7 +112,7 @@ Verifica: `GET http://localhost:8000/health` → `{"status": "ok"}`.
 pytest
 ```
 
-Los tests no requieren `.env` ni una base de datos real: `tests/conftest.py` define valores de `DATABASE_URL`/`GOOGLE_CLIENT_ID`/`JWT_SECRET` dummy para que `Settings` se instancie sin tocar Postgres. Verificado: 24/24 pasan en limpio.
+Los tests no requieren `.env` ni una base de datos real: `tests/conftest.py` define valores de `DATABASE_URL`/`GOOGLE_CLIENT_ID`/`JWT_SECRET` dummy para que `Settings` se instancie sin tocar Postgres. Verificado: 48/48 pasan en limpio.
 
 ## Mobile (Flutter)
 
@@ -136,7 +139,7 @@ Esto **no debería sobrescribir** `pubspec.yaml` ni `lib/` existentes (Flutter d
 flutter pub add google_sign_in http flutter_secure_storage
 ```
 
-Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (45 tests).
+Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (58 tests).
 
 ### 2.1 Build de Android
 

@@ -1,6 +1,6 @@
 # Arquitectura de HabitQ — estado implementado
 
-> Este documento describe la arquitectura **tal como está implementada** al día de hoy (rama `feature/google-login`). Para el plan completo del MVP (incluyendo lo que todavía no está construido), ver [`../../HABITQ_DEVELOPMENT_PLAN.md`](../../HABITQ_DEVELOPMENT_PLAN.md). Para diagramas visuales, ver [`../diagrams/`](../diagrams/).
+> Este documento describe la arquitectura **tal como está implementada** al día de hoy. Para el plan completo del MVP (incluyendo lo que todavía no está construido), ver [`../../HABITQ_DEVELOPMENT_PLAN.md`](../../HABITQ_DEVELOPMENT_PLAN.md). Para diagramas visuales, ver [`../diagrams/`](../diagrams/).
 
 ## Componentes
 
@@ -17,7 +17,7 @@
 └──────────────────┘
 ```
 
-No hay más servicios todavía: no hay RAG, no hay pgvector poblado, no hay LLM integrado (Fase 3 del plan, sin empezar).
+El pipeline de ingesta RAG (PDF → texto → limpieza → chunking → embeddings → Postgres) ya está implementado y corrido contra datos reales — ver `services/ingestion_service.py` y [`../../ingestion/README.md`](../../ingestion/README.md). `pgvector` no está disponible en el entorno de desarrollo; los embeddings se guardan como `ARRAY(FLOAT)` con similitud coseno en Python (`docs/decisions.md`, D-12). Todavía no hay retrieval expuesto por API, ni LLM integrado, ni endpoint de chat (resto de la Fase 3 del plan, sin empezar).
 
 ## Backend (`backend/app/`)
 
@@ -25,8 +25,8 @@ Capas, de afuera hacia adentro:
 
 - **`api/routes/`** — un router por recurso (`auth.py`, `profile.py`, `habits.py`), montados en `main.py`.
 - **`api/deps.py`** — dependencias de FastAPI compartidas: `get_db` (sesión SQLAlchemy) y `get_current_user` (decodifica el JWT, carga el `User`, lanza 401 si es inválido/expirado o el usuario no existe).
-- **`services/`** — lógica de negocio por recurso (`auth_service.py`, `profile_service.py`, `habit_record_service.py`), sin conocimiento de HTTP.
-- **`models/`** — modelos SQLAlchemy (`User`, `Profile`, `HabitRecord`).
+- **`services/`** — lógica de negocio por recurso (`auth_service.py`, `profile_service.py`, `habit_record_service.py`, `ingestion_service.py`), sin conocimiento de HTTP.
+- **`models/`** — modelos SQLAlchemy (`User`, `Profile`, `HabitRecord`, `ScientificDocument`, `DocumentChunk`).
 - **`schemas/`** — modelos Pydantic de entrada/salida (validación + serialización).
 - **`core/`** — configuración (`config.py`, lee `.env` de la raíz del repo) y JWT (`security.py`).
 - **`db/`** — engine/sesión (`session.py`) y `Base` declarativa (`base.py`).
@@ -59,10 +59,11 @@ Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos o
 lib/
 ├── core/
 │   ├── config/       # AppConfig — lee API_BASE_URL y GOOGLE_CLIENT_ID de --dart-define-from-file
-│   ├── networking/   # ApiClient (get/post/put/getList + JWT automático), TokenStorage
+│   ├── networking/   # ApiClient (get/post/put/getList + JWT automático), TokenStorage (read/write/delete)
+│   ├── utils/        # jwt.dart — decodifica el exp del JWT (sin verificar firma) para el refresh proactivo
 │   └── theme/        # AppColors, AppTheme
 ├── features/
-│   ├── auth/         # LoginScreen, AuthService (Google Sign-In + JWT)
+│   ├── auth/         # LoginScreen, AuthService (Google Sign-In + JWT + refresh proactivo)
 │   ├── consent/      # ConsentScreen, ConsentStorage (local, por dispositivo)
 │   ├── onboarding/    # OnboardingScreen (perfil), OnboardingHabitsScreen (9 preguntas), OnboardingService
 │   ├── home/         # HomeScreen (hub de navegación)
@@ -90,7 +91,11 @@ Login ──(sign-in exitoso)──▶ ¿consentimiento local aceptado?
                                             Home
 ```
 
-Desde Home: navegación a Mis Hábitos y Perfil (ambas reales). "Chat con HabitQ" queda como "Próximamente" — es lo único de la Fase 3 sin construir.
+Desde Home: navegación a Mis Hábitos y Perfil (ambas reales). "Chat con HabitQ" queda como "Próximamente" — el pipeline de ingesta RAG ya existe en el backend, pero todavía no hay retrieval, LLM ni endpoint `/chat` que una UI pueda consumir.
+
+### Refresh proactivo del JWT
+
+`HabitQApp` (`main.dart`) implementa `WidgetsBindingObserver` y llama a `AuthService.refreshTokenIfNeeded()` en `initState` y cada vez que la app vuelve a primer plano (`AppLifecycleState.resumed`). Si el JWT guardado vence en menos de 60 minutos, se reemite vía `POST /auth/refresh` y se sobrescribe en `TokenStorage`. Es proactivo y no reactivo (no hay retry-on-401) porque `/auth/refresh` exige un JWT todavía válido — uno ya expirado no se puede recuperar reintentando (ver D-09 y D-13 en `docs/decisions.md`).
 
 ### Convención de inyección de dependencias
 
@@ -100,4 +105,4 @@ Todo widget con lógica async (`OnboardingScreen`, `HabitsScreen`, `ProfileScree
 
 ## Base de datos
 
-3 tablas hoy (migraciones `0001`–`0003`): `users`, `profiles`, `habit_records`. Ver [`../diagrams/er-diagram.md`](../diagrams/er-diagram.md) para el ER completo, incluyendo las tablas planeadas para RAG que todavía no existen.
+5 tablas hoy (migraciones `0001`–`0004`): `users`, `profiles`, `habit_records`, `scientific_documents`, `document_chunks` (esta última con `embedding` como `ARRAY(FLOAT)`, no `Vector` — ver D-12 en `docs/decisions.md`). Ver [`../diagrams/er-diagram.md`](../diagrams/er-diagram.md) para el ER completo, incluyendo las tablas de `conversations`/`messages` planeadas para el chat, que todavía no existen.
