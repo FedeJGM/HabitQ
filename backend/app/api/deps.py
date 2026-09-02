@@ -1,8 +1,10 @@
 import uuid
+from functools import lru_cache
 
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sentence_transformers import SentenceTransformer
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
@@ -31,4 +33,9 @@ def get_current_user(
     return user
 
 
-__all__ = ["get_db", "get_current_user"]
+@lru_cache
+def get_embedding_model() -> SentenceTransformer:
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+
+__all__ = ["get_db", "get_current_user", "get_embedding_model"]
