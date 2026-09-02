@@ -1,6 +1,19 @@
-# Fase 3 (RAG/IA) — estado al pausar (2026-09-01)
+# Fase 3 (RAG/IA) — progreso
 
-Rama `feature/rag-chat`, creada desde `feature/google-login` tras una sesión de scoping (`/grill-me`) para no romper el núcleo ya estable. Este documento se escribe al pausar el trabajo, para retomarlo sin perder contexto — sea en esta sesión o en una futura.
+Rama `feature/rag-chat`, creada desde `feature/google-login` tras una sesión de scoping (`/grill-me`) para no romper el núcleo ya estable. Este documento se escribe para llevar el estado del trabajo sin perder contexto entre sesiones.
+
+## Actualización (2026-09-02)
+
+Los 4 pasos listados como "Pendiente" en la sección de abajo (estado al pausar 2026-09-01) ya están **completos**:
+
+1. Modelo + migración Alembic → commit `e46b6d3`.
+2. Servicio de ingesta (TDD) → commit `c9cbf85`.
+3. Script standalone `ingestion/scripts/ingest.py` → commit `8b7754b`.
+4. Verificación E2E manual → confirmada por el usuario: los 2 PDFs corridos contra Postgres real, `document_chunks` con `embedding` poblado, suite completa en verde.
+
+Lo que sigue no es continuación de este bloque sino el siguiente (ver "Explícitamente fuera de este bloque" abajo, todavía sin empezar): retrieval real, integración Gemini, `POST /chat`, tablas `conversations`/`messages`, Chat UI, historial.
+
+El resto de este documento (secciones "Hecho en este bloque", "Pendiente" y "Cómo retomar") describe el estado tal como quedó al pausar el 2026-09-01 — se conserva como registro histórico, no como la lista de tareas activa.
 
 ## Hecho en este bloque
 
@@ -34,6 +47,8 @@ Retomar desde el paso 6 del plan aprobado en la sesión de `/grill-me` (ver `doc
 El usuario percibió un mensaje relacionado con un proxy mientras esta sesión esperaba una tarea en segundo plano (descarga del modelo de embeddings, ~7.5 minutos). Validado con evidencia directa: esta sesión **no se cayó** — el trabajo en curso no se perdió, ningún archivo quedó corrupto, y los resultados se entregaron normalmente al terminar la tarea. El estado público de Anthropic no mostraba incidentes coincidentes con ese horario. Detalle completo de la investigación (hecha por otra sesión en paralelo, verificada por esta) en [`incidents/2026-09-01-claude-proxy-interruption.md`](./incidents/2026-09-01-claude-proxy-interruption.md).
 
 ## Cómo retomar
+
+*(histórico — ver "Actualización" arriba; los 3 pasos de abajo ya están hechos, se conservan por contexto)*
 
 1. `git checkout feature/rag-chat`
 2. Confirmar que `backend/.venv` tiene `pymupdf` y `sentence-transformers` instalados (`pip list`, o reinstalar desde `requirements.txt` si es una máquina distinta).
