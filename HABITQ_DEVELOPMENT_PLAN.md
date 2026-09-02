@@ -32,7 +32,7 @@ FastAPI
   ↓
 RAG
   ↓
-PostgreSQL + pgvector
+PostgreSQL (ARRAY(FLOAT) + similitud coseno)
   ↓
 Evidencia científica
   ↓
@@ -112,7 +112,7 @@ Fuentes verificables
 | Android | Android SDK / Android Studio |
 | Backend | FastAPI + Python |
 | Base de datos | PostgreSQL |
-| Búsqueda vectorial | pgvector |
+| Búsqueda vectorial | PostgreSQL `ARRAY(FLOAT)` + similitud coseno en Python (fallback, ver nota) |
 | ORM | SQLAlchemy |
 | Migraciones | Alembic |
 | Autenticación | Google Sign-In + JWT HabitQ |
@@ -135,12 +135,14 @@ Fuentes verificables
 2. No usar Spring Boot.
 3. No usar Firebase como backend principal.
 4. No usar una base vectorial adicional.
-5. PostgreSQL + pgvector será la única base de datos.
+5. PostgreSQL será la única base de datos.
 6. Gemini será el LLM principal por las limitaciones de hardware.
 7. Ollama no será requisito del MVP.
 8. Los embeddings se generan localmente.
 9. Los PDFs se almacenan localmente.
 10. Flutter nunca se conecta directamente a PostgreSQL.
+
+**Nota (2026-09-01):** `pgvector` no está disponible en el entorno de desarrollo actual (confirmado ausente en Stack Builder/Spatial Extensions y en el instalador específico de PostgreSQL). Fallback adoptado: la columna `embedding` de `document_chunks` (sección 8) se implementa como `ARRAY(FLOAT)`, con similitud coseno calculada en Python. Viable dado el corpus chico previsto (20-40 documentos, sección 13). Detalle completo en `docs/decisions.md` y `docs/rag-chat-progress.md`.
 
 ---
 
@@ -160,7 +162,7 @@ Fuentes verificables
    │    │               │
    ▼    ▼               ▼
  Auth PostgreSQL       RAG Service
-       + pgvector       │
+       (ARRAY(FLOAT))   │
                         ├── PyMuPDF
                         ├── sentence-transformers
                         └── Gemini
@@ -404,7 +406,7 @@ document_id UUID FK scientific_documents.id
 content TEXT
 page_number INTEGER NULL
 chunk_index INTEGER
-embedding VECTOR
+embedding ARRAY(FLOAT)
 ```
 
 ---
@@ -577,7 +579,7 @@ Chunking
  ↓
 Embeddings
  ↓
-pgvector
+PostgreSQL (ARRAY(FLOAT))
 ```
 
 ## Consulta
