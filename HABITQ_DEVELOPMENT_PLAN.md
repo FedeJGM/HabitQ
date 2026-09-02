@@ -199,7 +199,7 @@ Responsable principal de:
 - Python.
 - FastAPI.
 - PostgreSQL.
-- pgvector.
+- ARRAY(FLOAT) + similitud coseno.
 - SQLAlchemy.
 - Alembic.
 - Google token validation.
@@ -743,7 +743,7 @@ Una tarea puede marcarse `Done` solamente si:
 - PDFs.
 - Ingesta.
 - Embeddings.
-- pgvector.
+- ARRAY(FLOAT) + similitud coseno.
 - Retrieval.
 - Gemini.
 - Chat.
@@ -1007,7 +1007,7 @@ P2: instalar sentence-transformers y generar primer embedding.
 P1: componente tarjeta de fuente.
 
 ### Viernes 2
-P2: configurar pgvector.  
+P2: configurar ARRAY(FLOAT) + similitud coseno.  
 P1: pantalla historial.
 
 ### Sábado 3
@@ -1028,7 +1028,7 @@ P2: implementar embedding de pregunta.
 P1: terminar Chat UI.
 
 ### Martes 6
-P2: similarity search en pgvector.  
+P2: similarity search en ARRAY(FLOAT) + similitud coseno.  
 P1: integración inicial `POST /chat`.
 
 ### Miércoles 7
@@ -1165,7 +1165,7 @@ Checklist:
 - APK.
 - Backend funcional.
 - PostgreSQL.
-- pgvector.
+- ARRAY(FLOAT) + similitud coseno.
 - RAG.
 - Google Login.
 - Historial.
@@ -1206,7 +1206,7 @@ Git básico
 → SQL/PostgreSQL
 → SQLAlchemy
 → JWT
-→ pgvector
+→ ARRAY(FLOAT) + similitud coseno
 → RAG
 → Gemini
 → testing
