@@ -7,8 +7,8 @@ import '../auth/auth_service.dart';
 import '../auth/user.dart';
 
 /// Landing hub after login/onboarding. Scoped to the plan's MVP: greeting,
-/// logout, and pointers to sections not built yet (chat/habits/profile
-/// screens) instead of gamification/stats elements the plan excludes.
+/// logout, and navigation to Chat/Mis hábitos/Perfil, instead of the
+/// gamification/stats elements the plan excludes.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.authService});
 
@@ -83,9 +83,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
               const SizedBox(height: 24),
-              const _ComingSoonCard(
-                icon: Icons.chat_bubble_outline,
-                title: 'Chat con HabitQ',
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
+                  title: const Text('Chat con HabitQ'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).pushNamed(AppRoutes.chat),
+                ),
               ),
               const SizedBox(height: 12),
               Card(
@@ -108,25 +112,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ComingSoonCard extends StatelessWidget {
-  const _ComingSoonCard({required this.icon, required this.title});
-
-  final IconData icon;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon, color: AppColors.primary),
-        title: Text(title),
-        subtitle: const Text('Próximamente'),
-        enabled: false,
       ),
     );
   }

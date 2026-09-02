@@ -32,6 +32,7 @@ void main() {
         AppRoutes.login: (_) => const Scaffold(body: Text('Login')),
         AppRoutes.habits: (_) => const Scaffold(body: Text('Habits')),
         AppRoutes.profile: (_) => const Scaffold(body: Text('Profile')),
+        AppRoutes.chat: (_) => const Scaffold(body: Text('Chat')),
       },
       home: HomeScreen(authService: authService),
     );
@@ -73,13 +74,15 @@ void main() {
     expect(find.text('Login'), findsOneWidget);
   });
 
-  testWidgets('shows the still-unbuilt sections as not-yet-available', (tester) async {
+  testWidgets('navigates to Chat con HabitQ when its card is tapped', (tester) async {
     final fakeService = _FakeAuthService(userToReturn: alice);
     await tester.pumpWidget(buildApp(fakeService));
     await tester.pumpAndSettle();
 
-    expect(find.text('Chat con HabitQ'), findsOneWidget);
-    expect(find.text('Próximamente'), findsOneWidget);
+    await tester.tap(find.text('Chat con HabitQ'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chat'), findsOneWidget);
   });
 
   testWidgets('navigates to Mis hábitos when its card is tapped', (tester) async {
