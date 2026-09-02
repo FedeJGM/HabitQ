@@ -8,6 +8,8 @@ from app.db.base import Base
 from app.models import user  # noqa: F401  (registers User on Base.metadata)
 from app.models import document_chunk  # noqa: F401  (registers DocumentChunk on Base.metadata)
 from app.models import scientific_document  # noqa: F401  (registers ScientificDocument on Base.metadata)
+from app.models import conversation  # noqa: F401  (registers Conversation on Base.metadata)
+from app.models import message  # noqa: F401  (registers Message on Base.metadata)
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
