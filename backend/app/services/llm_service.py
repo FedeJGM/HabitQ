@@ -1,8 +1,17 @@
 from google import genai
+from google.genai import types
 
 from app.core.config import settings
 
 _MODEL = "gemini-flash-latest"
+
+# The SDK already retries 408/429/5xx with exponential backoff + jitter by
+# default (attempts=5, up to 60s max delay) — good defaults for a batch job,
+# too long for a user waiting on POST /chat. Tighten the window instead of
+# writing a retry loop by hand: covers the transient 503 "high demand"
+# errors seen on the free tier (D-14) without keeping the request open for
+# a minute-plus.
+_RETRY_OPTIONS = types.HttpRetryOptions(attempts=3, initial_delay=1.0, max_delay=8.0)
 
 _SYSTEM_INSTRUCTIONS = """Sos HabitQ, un asistente que orienta a personas hacia hábitos saludables \
 basándose en evidencia científica.
@@ -58,4 +67,7 @@ def generate_answer(
 
 
 def get_gemini_client() -> genai.Client:
-    return genai.Client(api_key=settings.gemini_api_key)
+    return genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=types.HttpOptions(retry_options=_RETRY_OPTIONS),
+    )

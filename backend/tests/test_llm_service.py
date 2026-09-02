@@ -1,4 +1,4 @@
-from app.services.llm_service import build_prompt, generate_answer
+from app.services.llm_service import build_prompt, generate_answer, get_gemini_client
 
 
 class _FakeResponse:
@@ -95,3 +95,18 @@ def test_generate_answer_passes_user_context_into_the_prompt() -> None:
 
     call = client.models.calls[0]
     assert "Perfil: rango de edad 25-34." in call["contents"]
+
+
+# --- get_gemini_client ---
+
+
+def test_get_gemini_client_configures_retry_for_transient_errors() -> None:
+    # No network call — just confirms the client is built with retry tuned
+    # for a synchronous HTTP request (short window, not the SDK's default
+    # up-to-5-attempts/60s-max, which is too long for POST /chat to wait on).
+    client = get_gemini_client()
+    retry_options = client._api_client._http_options.retry_options
+
+    assert retry_options is not None
+    assert retry_options.attempts == 3
+    assert retry_options.max_delay == 8.0

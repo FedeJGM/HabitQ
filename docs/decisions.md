@@ -171,3 +171,15 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Formato del contexto:** texto simple, sin humanizar los códigos de `habit_records` (`domain`/`key`/`value`, ej. `sleep.hours: 5_6`) — esa tabla de humanización (a texto legible en español) solo existe en `mobile/lib/features/habits/habit_questions.dart`, no se replicó en el backend para evitar duplicar la fuente de verdad.
 
 **Verificado con una llamada real:** con un usuario real (perfil `18-24`/`sleep_better`, 9 hábitos cargados) y la pregunta "¿Qué puedo hacer para dormir mejor?", Gemini referenció correctamente el hábito `sleep.hours=5_6` en la respuesta ("tus registros indican que estás durmiendo entre 5 y 6 horas"), mientras seguía admitiendo honestamente que el contexto RAG recuperado (un documento de la OMS sobre actividad física, no de sueño) no tenía evidencia específica — mismo comportamiento de no inventar ya validado en D-14.
+
+---
+
+## D-16 — Reintento de errores de Gemini: usar `HttpRetryOptions` del SDK, no un loop propio
+
+**Contexto:** el roadmap (Fase 4) pide manejo de errores de Gemini con reintento — hasta ahora `generate_answer` dejaba que un 503 "high demand" (D-14) se propagara directo a un 502 en `POST /chat`, sin reintentar. La opción obvia habría sido envolver la llamada en un loop manual con backoff.
+
+**Decisión:** `google-genai` ya expone `types.HttpOptions(retry_options=types.HttpRetryOptions(...))`, con reintento automático sobre 408/429/5xx, backoff exponencial y jitter — por defecto `attempts=5`, `max_delay=60.0`. `get_gemini_client()` (`backend/app/services/llm_service.py`) configura `attempts=3, initial_delay=1.0, max_delay=8.0`: los defaults del SDK están pensados para un job en background, no para una request HTTP síncrona donde el usuario espera con `POST /chat` abierto — 5 intentos con hasta 60s de espera cada uno podría dejar la request colgada más de un minuto.
+
+**Por qué no un loop propio:** usar el mecanismo ya provisto por el SDK evita reimplementar backoff/jitter/clasificación de qué códigos ameritan reintento (una fuente de bugs sutiles), y mantiene `generate_answer`/`build_prompt` sin cambios — el reintento vive enteramente en la configuración del cliente.
+
+**Testing:** un test verifica que `get_gemini_client()` arma el cliente con `retry_options.attempts == 3` y `max_delay == 8.0` (inspeccionando `client._api_client._http_options`, un atributo interno del SDK — aceptado como trade-off, no hay una API pública para leerlo de vuelta). Verificado además con una llamada real exitosa después de configurar el retry.
