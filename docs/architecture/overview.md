@@ -17,7 +17,7 @@
 └──────────────────┘
 ```
 
-El pipeline de ingesta RAG (PDF → texto → limpieza → chunking → embeddings → Postgres) ya está implementado y corrido contra datos reales — ver `services/ingestion_service.py` y [`../../ingestion/README.md`](../../ingestion/README.md). `pgvector` no está disponible en el entorno de desarrollo; los embeddings se guardan como `ARRAY(FLOAT)` con similitud coseno en Python (`docs/decisions.md`, D-12). Todavía no hay retrieval expuesto por API, ni LLM integrado, ni endpoint de chat (resto de la Fase 3 del plan, sin empezar).
+La Fase 3 del plan (RAG) está completa: ingesta (PDF → texto → limpieza → chunking → embeddings → Postgres, `services/ingestion_service.py`), retrieval (similitud coseno en Python — `pgvector` no está disponible en el entorno de desarrollo, embeddings como `ARRAY(FLOAT)`, `docs/decisions.md` D-12), integración con Gemini (`services/llm_service.py`), orquestación y persistencia de conversaciones (`services/chat_service.py`, `POST /chat`), y personalización con perfil/hábitos cuando es relevante (D-15). Ver [`../../ingestion/README.md`](../../ingestion/README.md).
 
 ## Backend (`backend/app/`)
 
@@ -25,8 +25,8 @@ Capas, de afuera hacia adentro:
 
 - **`api/routes/`** — un router por recurso (`auth.py`, `profile.py`, `habits.py`), montados en `main.py`.
 - **`api/deps.py`** — dependencias de FastAPI compartidas: `get_db` (sesión SQLAlchemy) y `get_current_user` (decodifica el JWT, carga el `User`, lanza 401 si es inválido/expirado o el usuario no existe).
-- **`services/`** — lógica de negocio por recurso (`auth_service.py`, `profile_service.py`, `habit_record_service.py`, `ingestion_service.py`), sin conocimiento de HTTP.
-- **`models/`** — modelos SQLAlchemy (`User`, `Profile`, `HabitRecord`, `ScientificDocument`, `DocumentChunk`).
+- **`services/`** — lógica de negocio por recurso (`auth_service.py`, `profile_service.py`, `habit_record_service.py`, `ingestion_service.py`, `retrieval_service.py`, `llm_service.py`, `chat_service.py`), sin conocimiento de HTTP.
+- **`models/`** — modelos SQLAlchemy (`User`, `Profile`, `HabitRecord`, `ScientificDocument`, `DocumentChunk`, `Conversation`, `Message`).
 - **`schemas/`** — modelos Pydantic de entrada/salida (validación + serialización).
 - **`core/`** — configuración (`config.py`, lee `.env` de la raíz del repo) y JWT (`security.py`).
 - **`db/`** — engine/sesión (`session.py`) y `Base` declarativa (`base.py`).
@@ -50,6 +50,10 @@ Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos o
 | GET | `/habits` | Sí | Lista todos los `habit_records` del usuario |
 | POST | `/habits` | Sí | Crea un nuevo registro de hábito |
 | PUT | `/habits/{habit_id}` | Sí | Actualiza un registro existente propio |
+| POST | `/chat` | Sí | Retrieval + Gemini (con personalización) en una conversación, nueva o existente; persiste ambos mensajes de forma atómica |
+| GET | `/chat/conversations` | Sí | Lista las conversaciones del usuario, más reciente primero |
+| GET | `/chat/conversations/{id}/messages` | Sí | Mensajes de una conversación propia, orden cronológico (404 si no existe o es de otro usuario) |
+| DELETE | `/chat/conversations/{id}` | Sí | Borra la conversación y sus mensajes (404 si no existe o es de otro usuario) |
 
 **Limitación conocida y documentada:** el JWT es *stateless* y no existe tabla de sesiones/blacklist en el modelo de datos del plan. `POST /auth/logout` no puede invalidar un token todavía válido — solo exige que el llamador presente uno. La sesión termina realmente cuando el cliente descarta el token localmente (ver abajo) o cuando expira (24h, configurable en `.env`).
 
@@ -68,7 +72,8 @@ lib/
 │   ├── onboarding/    # OnboardingScreen (perfil), OnboardingHabitsScreen (9 preguntas), OnboardingService
 │   ├── home/         # HomeScreen (hub de navegación)
 │   ├── habits/       # HabitsScreen (ver/editar), HabitsService, habit_questions.dart (metadata compartida)
-│   └── profile/      # ProfileScreen (ver/editar), ProfileService, profile_options.dart (metadata compartida)
+│   ├── profile/      # ProfileScreen (ver/editar), ProfileService, profile_options.dart (metadata compartida)
+│   └── chat/         # ChatScreen (conversación en vivo), ConversationHistoryScreen, ChatService
 └── app_routes.dart   # tabla central de rutas nombradas
 ```
 
@@ -91,7 +96,11 @@ Login ──(sign-in exitoso)──▶ ¿consentimiento local aceptado?
                                             Home
 ```
 
-Desde Home: navegación a Mis Hábitos y Perfil (ambas reales). "Chat con HabitQ" queda como "Próximamente" — el pipeline de ingesta RAG ya existe en el backend, pero todavía no hay retrieval, LLM ni endpoint `/chat` que una UI pueda consumir.
+Desde Home: navegación a Mis Hábitos, Perfil y Chat (las tres reales). Desde el Chat, un ícono en el `AppBar` navega al historial de conversaciones.
+
+### Chat (RAG)
+
+`ChatScreen` empieza vacía (nueva conversación) salvo que se abra con un `conversationId` — vía el parámetro del constructor (tests) o el argumento de la ruta `pushNamed` (navegación real desde `ConversationHistoryScreen`) — en cuyo caso precarga los mensajes existentes (`ChatService.fetchMessages`) antes de aceptar el primer mensaje nuevo. El envío es optimista: el mensaje del usuario se muestra antes de esperar la respuesta. El `conversationId` que devuelve `POST /chat` se reutiliza para los mensajes siguientes dentro de la misma sesión de pantalla, así el backend los mantiene en la misma conversación. Cada respuesta del asistente muestra sus fuentes (título + organización) debajo de la burbuja. `ConversationHistoryScreen` lista `GET /chat/conversations`, permite reabrir (navega a `ChatScreen` con el `conversationId`) o borrar (`DELETE`, sin recargar toda la lista).
 
 ### Refresh proactivo del JWT
 
@@ -105,4 +114,4 @@ Todo widget con lógica async (`OnboardingScreen`, `HabitsScreen`, `ProfileScree
 
 ## Base de datos
 
-5 tablas hoy (migraciones `0001`–`0004`): `users`, `profiles`, `habit_records`, `scientific_documents`, `document_chunks` (esta última con `embedding` como `ARRAY(FLOAT)`, no `Vector` — ver D-12 en `docs/decisions.md`). Ver [`../diagrams/er-diagram.md`](../diagrams/er-diagram.md) para el ER completo, incluyendo las tablas de `conversations`/`messages` planeadas para el chat, que todavía no existen.
+7 tablas hoy (migraciones `0001`–`0005`): `users`, `profiles`, `habit_records`, `scientific_documents`, `document_chunks` (con `embedding` como `ARRAY(FLOAT)`, no `Vector` — ver D-12 en `docs/decisions.md`), `conversations`, `messages`. Todo el modelo de datos del plan (sección 8) está implementado. Ver [`../diagrams/er-diagram.md`](../diagrams/er-diagram.md) para el ER completo.

@@ -1235,20 +1235,20 @@ No estudiar Python completo antes de comenzar.
 
 La aplicación se considera funcional si:
 
-- [ ] APK se instala en Android.
-- [ ] Usuario inicia sesión con Google.
-- [ ] Usuario completa onboarding.
-- [ ] Perfil se guarda.
-- [ ] Hábitos se guardan y actualizan.
-- [ ] Usuario abre Chat.
-- [ ] Pregunta llega a FastAPI.
-- [ ] RAG recupera evidencia.
-- [ ] Gemini genera respuesta.
-- [ ] Respuesta utiliza información recuperada.
-- [ ] Se muestran fuentes.
-- [ ] Conversación queda guardada.
-- [ ] Usuario consulta historial.
-- [ ] Un usuario no accede a información de otro.
+- [ ] APK se instala en Android. *(build anterior verificado antes de Fase 3; pendiente confirmar con el código actual)*
+- [x] Usuario inicia sesión con Google.
+- [x] Usuario completa onboarding.
+- [x] Perfil se guarda.
+- [x] Hábitos se guardan y actualizan.
+- [x] Usuario abre Chat.
+- [x] Pregunta llega a FastAPI.
+- [x] RAG recupera evidencia.
+- [x] Gemini genera respuesta.
+- [x] Respuesta utiliza información recuperada.
+- [x] Se muestran fuentes.
+- [x] Conversación queda guardada.
+- [x] Usuario consulta historial.
+- [x] Un usuario no accede a información de otro.
 - [ ] Errores externos no cierran la aplicación.
 - [ ] Backend puede exponerse mediante Cloudflare Tunnel.
 

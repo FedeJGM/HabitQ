@@ -14,10 +14,12 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 - Home: saludo, cerrar sesión, navegación a Mis Hábitos y Perfil.
 - Mis Hábitos: ver y editar los hábitos ya registrados (autosave).
 - Perfil: ver y editar edad y objetivo principal (autosave).
+- Chat con HabitQ: conversación con IA respaldada por RAG, con fuentes mostradas por cada respuesta y personalización según perfil/hábitos cuando es relevante.
+- Historial: lista de conversaciones pasadas, reabrir para continuar chateando, o borrarlas.
 
-**Ingesta RAG** — pipeline PDF → texto → limpieza → chunking → embeddings → Postgres, implementado y verificado contra Postgres real con 2 documentos de ejemplo (ver [`ingestion/README.md`](./ingestion/README.md) y [`docs/rag-chat-progress.md`](./docs/rag-chat-progress.md)). `pgvector` no está disponible en el entorno de desarrollo — los embeddings se guardan como `ARRAY(FLOAT)` con similitud coseno en Python (ver `docs/decisions.md`, D-12).
+**RAG completo (Fase 3 del plan)** — ingesta (PDF → texto → limpieza → chunking → embeddings → Postgres), retrieval (similitud coseno en Python, sin pgvector — no está disponible en el entorno de desarrollo, ver `docs/decisions.md` D-12), integración con Gemini (`POST /chat`), y persistencia de conversaciones. Verificado extremo a extremo contra Postgres y la API real de Gemini (ver [`ingestion/README.md`](./ingestion/README.md), [`docs/rag-chat-progress.md`](./docs/rag-chat-progress.md) y `docs/decisions.md` D-12 a D-15).
 
-**Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): retrieval real sobre los embeddings ya ingeridos, integración con Gemini, `POST /chat`, tablas `conversations`/`messages`, Chat UI y historial de conversaciones.
+**Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): manejo de errores de Gemini con reintento (retry/backoff — hoy solo se muestra el error, sin reintentar automáticamente), hardening de seguridad general.
 
 > **Nota de alcance (Login):** el boceto de Figma (`Diseño/Inicio de sesión.png`) incluye un formulario de correo/contraseña. El plan (secciones 2, 3, 10, 20) excluye explícitamente el login tradicional del MVP — solo Google Sign-In. La pantalla implementada usa **solo Google**, adaptando el boceto (sin campos de correo/contraseña ni link de registro).
 >
@@ -112,7 +114,7 @@ Verifica: `GET http://localhost:8000/health` → `{"status": "ok"}`.
 pytest
 ```
 
-Los tests no requieren `.env` ni una base de datos real: `tests/conftest.py` define valores de `DATABASE_URL`/`GOOGLE_CLIENT_ID`/`JWT_SECRET` dummy para que `Settings` se instancie sin tocar Postgres. Verificado: 48/48 pasan en limpio.
+Los tests no requieren `.env` ni una base de datos real: `tests/conftest.py` define valores de `DATABASE_URL`/`GOOGLE_CLIENT_ID`/`JWT_SECRET`/`GEMINI_API_KEY` dummy para que `Settings` se instancie sin tocar Postgres ni la API real de Gemini. Verificado: 89/89 pasan en limpio.
 
 ## Mobile (Flutter)
 
@@ -139,7 +141,7 @@ Esto **no debería sobrescribir** `pubspec.yaml` ni `lib/` existentes (Flutter d
 flutter pub add google_sign_in http flutter_secure_storage
 ```
 
-Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (58 tests).
+Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (83 tests).
 
 ### 2.1 Build de Android
 
