@@ -81,7 +81,37 @@ Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involu
 - **Postcondición:** El usuario vuelve a la pantalla de Login. El JWT anterior sigue siendo técnicamente válido hasta su expiración natural (ver limitación en `../architecture/overview.md`).
 - **Endpoints:** `POST /auth/logout` (best-effort, no bloqueante).
 
-## UC-08 — Conversar con HabitQ (Pendiente)
+## UC-08 — Conversar con HabitQ (RAG)
 
-- **Estado:** No implementado — Fase 3 del plan (RAG/IA).
-- Requiere: ingesta de PDFs, embeddings, pgvector, integración con Gemini, tablas `conversations`/`messages`/`scientific_documents`/`document_chunks`.
+- **Actor:** Usuario autenticado.
+- **Precondición:** Ninguna especial — no requiere onboarding completo.
+- **Flujo principal:**
+  1. El usuario abre "Chat con HabitQ" desde Home.
+  2. Escribe una pregunta y la envía (se muestra de inmediato, envío optimista).
+  3. El sistema recupera los fragmentos de evidencia más relevantes de `document_chunks` (similitud coseno, sin pgvector — ver `../decisions.md` D-12), arma un prompt con esa evidencia y, si es relevante, el perfil/hábitos del usuario (D-15), y llama a Gemini.
+  4. El sistema guarda la pregunta y la respuesta como mensajes de la conversación (nueva o existente).
+  5. La app muestra la respuesta junto con las fuentes usadas (título, organización).
+- **Postcondición:** Si era la primera pregunta, nueva fila en `conversations`; siempre, 2 filas nuevas en `messages`. Si Gemini falla, no se persiste nada (ni siquiera una conversación vacía — flujo atómico).
+- **Endpoints:** `POST /chat`.
+
+## UC-09 — Consultar el historial de conversaciones
+
+- **Actor:** Usuario autenticado con al menos una conversación previa (UC-08).
+- **Precondición:** UC-08 completado alguna vez.
+- **Flujo principal:**
+  1. Desde el Chat, el usuario toca el ícono de historial.
+  2. El sistema lista sus conversaciones, más reciente primero.
+  3. El usuario toca una para reabrirla: se precargan sus mensajes y puede seguir chateando en ella (mismo `conversation_id`).
+- **Postcondición:** Ninguna nueva si solo se consulta; si continúa la conversación, aplica UC-08 sobre la misma conversación.
+- **Endpoints:** `GET /chat/conversations`, `GET /chat/conversations/{id}/messages`.
+
+## UC-10 — Borrar una conversación
+
+- **Actor:** Usuario autenticado, desde el historial (UC-09).
+- **Precondición:** La conversación existe y pertenece al usuario.
+- **Flujo principal:**
+  1. El usuario toca borrar en un ítem del historial.
+  2. El sistema borra la conversación y todos sus mensajes.
+  3. La app quita el ítem de la lista sin recargarla entera.
+- **Postcondición:** La conversación y sus mensajes ya no existen en la base.
+- **Endpoints:** `DELETE /chat/conversations/{id}` (404 si no existe o es de otro usuario, mismo criterio que UC-05/D-03).

@@ -10,15 +10,15 @@ graph TD
     mobile["📱 HabitQ Mobile<br/>Flutter — Android<br/>Login, onboarding, hábitos, perfil"]
     backend["⚙️ HabitQ Backend<br/>FastAPI<br/>Auth, perfil, hábitos"]
     google["🔐 Google Sign-In<br/>OAuth 2.0"]
-    postgres[("🗄️ PostgreSQL<br/>+ pgvector (futuro)")]
-    gemini["🤖 Gemini API<br/>(Futuro — Fase 3)"]
+    postgres[("🗄️ PostgreSQL<br/>embeddings como ARRAY(FLOAT)")]
+    gemini["🤖 Gemini API<br/>gemini-flash-latest"]
 
     user -->|usa| mobile
     mobile -->|autentica| google
     mobile -->|HTTPS/REST + JWT| backend
     backend -->|valida ID token| google
     backend -->|SQL| postgres
-    backend -.->|futuro: genera respuestas| gemini
+    backend -->|genera respuestas RAG| gemini
 ```
 
 ## Estado de cada relación
@@ -27,8 +27,8 @@ graph TD
 |---|---|
 | Usuario → Mobile | ✅ Implementado |
 | Mobile → Google (OAuth) | ✅ Implementado |
-| Mobile → Backend (REST + JWT) | ✅ Implementado (auth, perfil, hábitos) |
+| Mobile → Backend (REST + JWT) | ✅ Implementado (auth, perfil, hábitos, chat, historial) |
 | Backend → Google (validar ID token) | ✅ Implementado |
-| Backend → PostgreSQL | ✅ Implementado (`users`, `profiles`, `habit_records`) |
-| Backend → Gemini | ❌ No implementado — Fase 3 del plan |
-| pgvector (embeddings) | ❌ No implementado — Fase 3 del plan |
+| Backend → PostgreSQL | ✅ Implementado (`users`, `profiles`, `habit_records`, `scientific_documents`, `document_chunks`, `conversations`, `messages` — 7 tablas, migraciones `0001`–`0005`) |
+| Backend → Gemini | ✅ Implementado (`POST /chat`, retry configurado — ver `docs/decisions.md` D-14/D-16) |
+| pgvector (embeddings) | ❌ No usado — no disponible en el entorno de desarrollo; los embeddings se guardan como `ARRAY(FLOAT)` con similitud coseno en Python (ver `docs/decisions.md` D-12) |

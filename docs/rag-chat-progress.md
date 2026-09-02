@@ -11,9 +11,25 @@ Los 4 pasos listados como "Pendiente" en la sección de abajo (estado al pausar 
 3. Script standalone `ingestion/scripts/ingest.py` → commit `8b7754b`.
 4. Verificación E2E manual → confirmada por el usuario: los 2 PDFs corridos contra Postgres real, `document_chunks` con `embedding` poblado, suite completa en verde.
 
-Lo que sigue no es continuación de este bloque sino el siguiente (ver "Explícitamente fuera de este bloque" abajo, todavía sin empezar): retrieval real, integración Gemini, `POST /chat`, tablas `conversations`/`messages`, Chat UI, historial.
+Lo que seguía en ese momento (ver "Explícitamente fuera de este bloque" abajo) también se completó después, en la misma sesión: retrieval real, integración Gemini, `POST /chat`, tablas `conversations`/`messages`, Chat UI, historial de conversaciones, personalización con perfil/hábitos, y reintento de errores de Gemini. Ver la sección "Actualización (2026-09-02) — Fase 3 completa" más abajo para el detalle.
 
 El resto de este documento (secciones "Hecho en este bloque", "Pendiente" y "Cómo retomar") describe el estado tal como quedó al pausar el 2026-09-01 — se conserva como registro histórico, no como la lista de tareas activa.
+
+## Actualización (2026-09-02) — Fase 3 completa
+
+Con esto, **toda la Fase 3 del plan (RAG) y su extensión de Fase 4 relacionada con el chat quedan cerradas**. Además de los 4 pasos de ingesta ya marcados arriba como completos, en la misma sesión se implementó y verificó (unit tests + llamadas reales contra Postgres y la API de Gemini):
+
+- Migración `0005` (`conversations`/`messages`) → commit `34b1eee`.
+- Servicio de retrieval (similitud coseno, sin pgvector) → commit `a3406d5`.
+- Servicio de Gemini (`llm_service.py`) → commit `9ee1188`.
+- `POST /chat` (retrieval + Gemini + persistencia atómica) → commit `6842b45`.
+- `GET/DELETE` de conversaciones → commit `8c785ea`.
+- Chat UI en mobile → commit `0a41630`.
+- Historial de conversaciones en mobile → commit `55f3912`.
+- Personalización con perfil/hábitos → commit `aee8ec2`.
+- Reintento de errores de Gemini → commit `294df18`.
+
+No queda ningún ítem de la Fase 3 del plan sin implementar. El detalle completo de cada decisión de diseño está en `docs/decisions.md` (D-12 a D-16).
 
 ## Hecho en este bloque
 
