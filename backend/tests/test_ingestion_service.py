@@ -6,6 +6,7 @@ import pytest
 from app.models.document_chunk import DocumentChunk
 from app.models.scientific_document import ScientificDocument
 from app.services.ingestion_service import (
+    already_ingested,
     chunk_text,
     clean_text,
     embed_chunks,
@@ -32,6 +33,17 @@ class _FakeEmbeddingModel:
         return [[float(len(text))] for text in texts]
 
 
+class _FakeQuery:
+    def __init__(self, results: list[object]) -> None:
+        self._results = results
+
+    def filter(self, *args, **kwargs) -> "_FakeQuery":
+        return self
+
+    def first(self) -> object | None:
+        return self._results[0] if self._results else None
+
+
 class _FakeDb:
     def __init__(self) -> None:
         self.added: list[object] = []
@@ -45,6 +57,9 @@ class _FakeDb:
     def refresh(self, obj: object) -> None:
         if getattr(obj, "id", None) is None:
             obj.id = uuid.uuid4()
+
+    def query(self, model):
+        return _FakeQuery([obj for obj in self.added if isinstance(obj, model)])
 
 
 def _fake_extract_pages(pdf_path: Path) -> list[tuple[int, str]]:
@@ -150,6 +165,20 @@ def test_ingest_document_creates_document_and_chunks() -> None:
     assert [chunk.chunk_index for chunk in chunks] == list(range(len(chunks)))
     assert {chunk.page_number for chunk in chunks} == {1, 2}
     assert all(isinstance(chunk.embedding, list) for chunk in chunks)
+
+
+# --- already_ingested ---
+
+
+def test_already_ingested_returns_false_when_no_documents_exist() -> None:
+    db = _FakeDb()
+    assert already_ingested(db, "some.pdf") is False
+
+
+def test_already_ingested_returns_true_when_a_document_exists() -> None:
+    db = _FakeDb()
+    db.add(ScientificDocument(title="T", language="en", file_path="some.pdf"))
+    assert already_ingested(db, "some.pdf") is True
 
 
 def test_ingest_document_skips_empty_pages() -> None:

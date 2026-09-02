@@ -63,6 +63,15 @@ def chunk_text(
     return chunks
 
 
+def already_ingested(db: Session, file_path: str) -> bool:
+    return (
+        db.query(ScientificDocument)
+        .filter(ScientificDocument.file_path == file_path)
+        .first()
+        is not None
+    )
+
+
 def embed_chunks(texts: list[str], model) -> list[list[float]]:
     embeddings = model.encode(texts)
     return [[float(value) for value in vector] for vector in embeddings]
