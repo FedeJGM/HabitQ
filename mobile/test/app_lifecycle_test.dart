@@ -31,6 +31,11 @@ class _FakeApiClient implements ApiClient {
   Future<List<dynamic>> getList(String path) {
     throw UnimplementedError();
   }
+
+  @override
+  Future<void> delete(String path) {
+    throw UnimplementedError();
+  }
 }
 
 class _FakeTokenStorage implements TokenStorage {

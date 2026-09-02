@@ -2,17 +2,26 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/app_routes.dart';
 import 'package:mobile/core/networking/api_client.dart';
 import 'package:mobile/features/chat/chat_screen.dart';
 import 'package:mobile/features/chat/chat_service.dart';
 
 class _FakeChatService implements ChatService {
-  _FakeChatService({this.responses = const [], this.error});
+  _FakeChatService({
+    this.responses = const [],
+    this.error,
+    this.historyMessages,
+    this.historyError,
+  });
 
   List<ChatTurn> responses;
   ApiException? error;
+  List<ChatMessage>? historyMessages;
+  ApiException? historyError;
   final List<String> sentMessages = [];
   final List<String?> sentConversationIds = [];
+  final List<String> fetchMessagesConversationIds = [];
   int _callCount = 0;
   Completer<void>? gate;
 
@@ -25,6 +34,23 @@ class _FakeChatService implements ChatService {
     final turn = responses[_callCount];
     _callCount++;
     return turn;
+  }
+
+  @override
+  Future<List<ChatMessage>> fetchMessages(String conversationId) async {
+    fetchMessagesConversationIds.add(conversationId);
+    if (historyError != null) throw historyError!;
+    return historyMessages ?? [];
+  }
+
+  @override
+  Future<List<ConversationSummary>> fetchConversations() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> deleteConversation(String conversationId) {
+    throw UnimplementedError();
   }
 }
 
@@ -139,5 +165,69 @@ void main() {
 
     expect(find.text('No se pudo conectar con el servidor.'), findsOneWidget);
     expect(find.text('¿Cuánto debo dormir?'), findsOneWidget);
+  });
+
+  testWidgets('preloads history when opened with a conversationId', (tester) async {
+    final fakeService = _FakeChatService(
+      historyMessages: [
+        const ChatMessage(id: 'm1', role: 'user', content: '¿Cuánto debo dormir?'),
+        const ChatMessage(id: 'm2', role: 'assistant', content: 'Entre 7 y 9 horas.'),
+      ],
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: ChatScreen(chatService: fakeService, conversationId: 'c1'),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(fakeService.fetchMessagesConversationIds, ['c1']);
+    expect(find.text('¿Cuánto debo dormir?'), findsOneWidget);
+    expect(find.text('Entre 7 y 9 horas.'), findsOneWidget);
+  });
+
+  testWidgets('sends the next message under the preloaded conversationId', (tester) async {
+    final fakeService = _FakeChatService(
+      historyMessages: [
+        const ChatMessage(id: 'm1', role: 'user', content: '¿Cuánto debo dormir?'),
+      ],
+      responses: [_turn(conversationId: 'c1', content: 'Entre 7 y 9 horas.')],
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: ChatScreen(chatService: fakeService, conversationId: 'c1'),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '¿Y para adolescentes?');
+    await tester.pump();
+    await tester.tap(_sendButton());
+    await tester.pumpAndSettle();
+
+    expect(fakeService.sentConversationIds, ['c1']);
+  });
+
+  testWidgets('shows an error when loading history fails', (tester) async {
+    final fakeService = _FakeChatService(
+      historyError: ApiException('No se pudo cargar la conversación.'),
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: ChatScreen(chatService: fakeService, conversationId: 'c1'),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No se pudo cargar la conversación.'), findsOneWidget);
+  });
+
+  testWidgets('history icon navigates to the chat history route', (tester) async {
+    final fakeService = _FakeChatService();
+    await tester.pumpWidget(MaterialApp(
+      routes: {
+        AppRoutes.chatHistory: (_) => const Scaffold(body: Text('History')),
+      },
+      home: ChatScreen(chatService: fakeService),
+    ));
+
+    await tester.tap(find.byIcon(Icons.history));
+    await tester.pumpAndSettle();
+
+    expect(find.text('History'), findsOneWidget);
   });
 }

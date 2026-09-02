@@ -57,6 +57,14 @@ class ApiClient {
     return _decodeList(response);
   }
 
+  Future<void> delete(String path) async {
+    final response = await _send(() async {
+      final headers = await _headers();
+      return _client.delete(_uri(path), headers: headers).timeout(const Duration(seconds: 15));
+    });
+    _checkStatus(response);
+  }
+
   Future<http.Response> _send(Future<http.Response> Function() request) async {
     try {
       return await request();
@@ -87,6 +95,17 @@ class ApiClient {
     }
 
     return decoded;
+  }
+
+  /// Like [_decode] but for responses with no body to parse (e.g. 204).
+  void _checkStatus(http.Response response) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final decoded = response.body.isEmpty
+          ? <String, dynamic>{}
+          : jsonDecode(response.body) as Map<String, dynamic>;
+      final detail = decoded['detail'];
+      throw ApiException(detail is String ? detail : 'Ocurrió un error inesperado.');
+    }
   }
 
   List<dynamic> _decodeList(http.Response response) {

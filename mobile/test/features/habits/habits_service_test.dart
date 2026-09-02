@@ -52,6 +52,11 @@ class _FakeApiClient implements ApiClient {
     if (error != null) throw error!;
     return listResponse!;
   }
+
+  @override
+  Future<void> delete(String path) {
+    throw UnimplementedError();
+  }
 }
 
 void main() {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
 import 'chat_service.dart';
@@ -13,13 +14,16 @@ class _DisplayMessage {
 }
 
 /// Chat with HabitQ. Each screen instance is its own session: it starts
-/// empty (no history loaded — that's the separate "historial" feature) and
-/// carries the conversationId returned by the first reply forward to
-/// subsequent messages, so the backend keeps them in the same conversation.
+/// empty unless opened with [conversationId] (from ConversationHistoryScreen
+/// — via constructor for tests, or the pushNamed route argument otherwise),
+/// in which case its prior messages are preloaded. Either way, the
+/// conversationId in play is carried forward to subsequent messages, so the
+/// backend keeps them in the same conversation.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key, this.chatService});
+  const ChatScreen({super.key, this.chatService, this.conversationId});
 
   final ChatService? chatService;
+  final String? conversationId;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -32,13 +36,50 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<_DisplayMessage> _messages = [];
   String? _conversationId;
   bool _isSending = false;
+  bool _isLoadingHistory = false;
   String? _errorMessage;
+  bool _initializedFromArguments = false;
 
   @override
   void initState() {
     super.initState();
     _chatService = widget.chatService ?? ChatService();
     _controller.addListener(() => setState(() {}));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initializedFromArguments) return;
+    _initializedFromArguments = true;
+
+    final resolvedId =
+        widget.conversationId ?? (ModalRoute.of(context)?.settings.arguments as String?);
+    if (resolvedId != null) {
+      _conversationId = resolvedId;
+      _loadHistory(resolvedId);
+    }
+  }
+
+  Future<void> _loadHistory(String conversationId) async {
+    setState(() => _isLoadingHistory = true);
+    try {
+      final messages = await _chatService.fetchMessages(conversationId);
+      if (!mounted) return;
+      setState(() {
+        _messages.addAll(
+          messages.map((m) => _DisplayMessage(role: m.role, content: m.content)),
+        );
+        _isLoadingHistory = false;
+      });
+      _scrollToBottom();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.message;
+        _isLoadingHistory = false;
+      });
+    }
   }
 
   @override
@@ -131,12 +172,23 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Chat con HabitQ')),
+      appBar: AppBar(
+        title: const Text('Chat con HabitQ'),
+        actions: [
+          IconButton(
+            onPressed: () => Navigator.of(context).pushNamed(AppRoutes.chatHistory),
+            icon: const Icon(Icons.history),
+            tooltip: 'Historial de conversaciones',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
-              child: _messages.isEmpty
+              child: _isLoadingHistory
+                  ? const Center(child: CircularProgressIndicator())
+                  : _messages.isEmpty
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),

@@ -35,6 +35,27 @@ class ChatMessage {
   final String content;
 }
 
+class ConversationSummary {
+  const ConversationSummary({
+    required this.id,
+    required this.title,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory ConversationSummary.fromJson(Map<String, dynamic> json) => ConversationSummary(
+        id: json['id'] as String,
+        title: json['title'] as String?,
+        createdAt: DateTime.parse(json['created_at'] as String),
+        updatedAt: DateTime.parse(json['updated_at'] as String),
+      );
+
+  final String id;
+  final String? title;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+}
+
 class ChatTurn {
   const ChatTurn({required this.conversationId, required this.message, required this.sources});
 
@@ -66,5 +87,19 @@ class ChatService {
       if (conversationId != null) 'conversation_id': conversationId,
     });
     return ChatTurn.fromJson(response);
+  }
+
+  Future<List<ConversationSummary>> fetchConversations() async {
+    final results = await _apiClient.getList('/chat/conversations');
+    return results.cast<Map<String, dynamic>>().map(ConversationSummary.fromJson).toList();
+  }
+
+  Future<List<ChatMessage>> fetchMessages(String conversationId) async {
+    final results = await _apiClient.getList('/chat/conversations/$conversationId/messages');
+    return results.cast<Map<String, dynamic>>().map(ChatMessage.fromJson).toList();
+  }
+
+  Future<void> deleteConversation(String conversationId) {
+    return _apiClient.delete('/chat/conversations/$conversationId');
   }
 }
