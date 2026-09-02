@@ -19,7 +19,7 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 
 **RAG completo (Fase 3 del plan)** — ingesta (PDF → texto → limpieza → chunking → embeddings → Postgres), retrieval (similitud coseno en Python, sin pgvector — no está disponible en el entorno de desarrollo, ver `docs/decisions.md` D-12), integración con Gemini (`POST /chat`), y persistencia de conversaciones. Verificado extremo a extremo contra Postgres y la API real de Gemini (ver [`ingestion/README.md`](./ingestion/README.md), [`docs/rag-chat-progress.md`](./docs/rag-chat-progress.md) y `docs/decisions.md` D-12 a D-15).
 
-**Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): manejo de errores de Gemini con reintento (retry/backoff — hoy solo se muestra el error, sin reintentar automáticamente), hardening de seguridad general.
+**Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): hardening de seguridad general.
 
 > **Nota de alcance (Login):** el boceto de Figma (`Diseño/Inicio de sesión.png`) incluye un formulario de correo/contraseña. El plan (secciones 2, 3, 10, 20) excluye explícitamente el login tradicional del MVP — solo Google Sign-In. La pantalla implementada usa **solo Google**, adaptando el boceto (sin campos de correo/contraseña ni link de registro).
 >
