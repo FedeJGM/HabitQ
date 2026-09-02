@@ -159,3 +159,15 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Nota sobre errores 503 ("high demand"):** son transitorios y esperables en el tier gratuito — no indican un problema de código, config o de la API key. Se confirmó reintentando: la misma llamada que falló 3 veces seguidas funcionó al reintentar. `generate_answer` (P2-3) no implementa retry/backoff todavía — es un ítem separado y explícito del roadmap ("manejo errores Gemini", Fase 4), no de este paso.
 
 **Cómo verificar el modelo correcto en el futuro** (si `gemini-flash-latest` alguna vez deja de existir): `client.models.list()` filtrando por `'generateContent' in m.supported_actions` devuelve los modelos realmente disponibles para esa API key — más confiable que cualquier nombre hardcodeado en documentación o en este archivo.
+
+---
+
+## D-15 — Personalización con perfil/hábitos: el LLM decide la relevancia, no se clasifica programáticamente
+
+**Contexto:** el plan (sección 14) pide "personalizar solo cuando el perfil sea relevante", sin especificar cómo decidir esa relevancia. La alternativa habría sido clasificar la pregunta del usuario para decidir si aplica personalización antes de llamar a Gemini (otro paso de NLP, otra fuente de error).
+
+**Decisión:** mismo criterio ya usado con el contexto de RAG (ver D-14 y `llm_service._SYSTEM_INSTRUCTIONS`): `chat_service.send_message` siempre arma el `user_context` (perfil + hábitos del usuario, si existen — `build_user_context`) y se lo pasa a `generate_answer`, pero la instrucción explícita al modelo es usarlo *solo si es relevante para la pregunta* y no mencionarlo si no viene al caso. No hay clasificación previa de relevancia en el backend.
+
+**Formato del contexto:** texto simple, sin humanizar los códigos de `habit_records` (`domain`/`key`/`value`, ej. `sleep.hours: 5_6`) — esa tabla de humanización (a texto legible en español) solo existe en `mobile/lib/features/habits/habit_questions.dart`, no se replicó en el backend para evitar duplicar la fuente de verdad.
+
+**Verificado con una llamada real:** con un usuario real (perfil `18-24`/`sleep_better`, 9 hábitos cargados) y la pregunta "¿Qué puedo hacer para dormir mejor?", Gemini referenció correctamente el hábito `sleep.hours=5_6` en la respuesta ("tus registros indican que estás durmiendo entre 5 y 6 horas"), mientras seguía admitiendo honestamente que el contexto RAG recuperado (un documento de la OMS sobre actividad física, no de sueño) no tenía evidencia específica — mismo comportamiento de no inventar ya validado en D-14.

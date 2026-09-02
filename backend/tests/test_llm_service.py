@@ -49,6 +49,17 @@ def test_build_prompt_with_empty_context_signals_no_evidence_available() -> None
     assert "no hay" in empty_prompt.lower() or "sin evidencia" in empty_prompt.lower()
 
 
+def test_build_prompt_without_user_context_omits_user_section() -> None:
+    prompt = build_prompt("q", ["chunk"])
+    assert "Contexto del usuario" not in prompt
+
+
+def test_build_prompt_with_user_context_includes_it() -> None:
+    prompt = build_prompt("q", ["chunk"], user_context="Perfil: rango de edad 25-34.")
+    assert "Contexto del usuario" in prompt
+    assert "Perfil: rango de edad 25-34." in prompt
+
+
 # --- generate_answer ---
 
 
@@ -70,3 +81,17 @@ def test_generate_answer_sends_the_built_prompt_to_the_configured_model() -> Non
     assert call["model"] == "gemini-flash-latest"
     assert "¿Cuánto debo dormir?" in call["contents"]
     assert "chunk relevante" in call["contents"]
+
+
+def test_generate_answer_passes_user_context_into_the_prompt() -> None:
+    client = _FakeClient()
+
+    generate_answer(
+        "¿Cuánto debo dormir?",
+        ["chunk relevante"],
+        client,
+        user_context="Perfil: rango de edad 25-34.",
+    )
+
+    call = client.models.calls[0]
+    assert "Perfil: rango de edad 25-34." in call["contents"]

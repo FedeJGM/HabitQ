@@ -15,10 +15,14 @@ en tu conocimiento interno cuando la pregunta requiera evidencia científica.
 va a mostrarse junto con las fuentes reales por separado, así que no las menciones en el texto.
 - No diagnostiques ni prescribas medicamentos. No presentes afirmaciones médicas como certezas \
 absolutas. Recomendá atención profesional cuando corresponda.
+- Si te paso contexto del usuario (perfil/hábitos), personalizá la respuesta con eso SOLO cuando \
+sea relevante para la pregunta — no lo menciones ni lo fuerces si no viene al caso.
 """
 
 
-def build_prompt(question: str, context_chunks: list[str]) -> str:
+def build_prompt(
+    question: str, context_chunks: list[str], user_context: str | None = None
+) -> str:
     if context_chunks:
         context_section = "\n\n".join(
             f"[Fragmento {i + 1}]\n{chunk}" for i, chunk in enumerate(context_chunks)
@@ -30,15 +34,25 @@ def build_prompt(question: str, context_chunks: list[str]) -> str:
             "con confianza en vez de inventar una respuesta."
         )
 
-    return (
-        f"{_SYSTEM_INSTRUCTIONS}\n"
-        f"Contexto recuperado:\n{context_section}\n\n"
-        f"Pregunta del usuario: {question}\n"
-    )
+    prompt = f"{_SYSTEM_INSTRUCTIONS}\nContexto recuperado:\n{context_section}\n\n"
+
+    if user_context:
+        prompt += (
+            "Contexto del usuario (usar SOLO si es relevante para la pregunta):\n"
+            f"{user_context}\n\n"
+        )
+
+    prompt += f"Pregunta del usuario: {question}\n"
+    return prompt
 
 
-def generate_answer(question: str, context_chunks: list[str], client) -> str:
-    prompt = build_prompt(question, context_chunks)
+def generate_answer(
+    question: str,
+    context_chunks: list[str],
+    client,
+    user_context: str | None = None,
+) -> str:
+    prompt = build_prompt(question, context_chunks, user_context=user_context)
     response = client.models.generate_content(model=_MODEL, contents=prompt)
     return response.text
 

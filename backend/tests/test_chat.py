@@ -9,9 +9,12 @@ from app.api import deps
 from app.main import app
 from app.models.conversation import Conversation
 from app.models.document_chunk import DocumentChunk
+from app.models.habit_record import HabitRecord
 from app.models.message import Message
+from app.models.profile import Profile
 from app.models.scientific_document import ScientificDocument
 from app.models.user import User
+from app.services.chat_service import build_user_context
 from app.services.llm_service import get_gemini_client
 
 client = TestClient(app)
@@ -115,8 +118,10 @@ class _FakeModels:
     def __init__(self, answer: str | None = None, error: Exception | None = None) -> None:
         self._answer = answer
         self._error = error
+        self.calls: list[dict] = []
 
     def generate_content(self, model: str, contents: str):
+        self.calls.append({"model": model, "contents": contents})
         if self._error is not None:
             raise self._error
 
@@ -428,3 +433,69 @@ def test_delete_conversation_removes_it_and_its_messages() -> None:
     assert response.status_code == 204
     assert conversation not in fake_db.added
     assert message not in fake_db.added
+
+
+# --- build_user_context ---
+
+
+def test_build_user_context_returns_none_without_profile_or_habits() -> None:
+    assert build_user_context(None, []) is None
+
+
+def test_build_user_context_with_profile_only() -> None:
+    profile = Profile(user_id=uuid.uuid4(), age_range="25-34", main_goal="sleep_better")
+    context = build_user_context(profile, [])
+    assert context is not None
+    assert "25-34" in context
+    assert "sleep_better" in context
+    assert "Hábitos" not in context
+
+
+def test_build_user_context_with_habits_only() -> None:
+    habit = HabitRecord(user_id=uuid.uuid4(), domain="sleep", key="hours", value="5_6")
+    context = build_user_context(None, [habit])
+    assert context is not None
+    assert "sleep.hours" in context
+    assert "5_6" in context
+    assert "Perfil" not in context
+
+
+def test_build_user_context_with_profile_and_habits() -> None:
+    profile = Profile(user_id=uuid.uuid4(), age_range="25-34", main_goal="sleep_better")
+    habit = HabitRecord(user_id=uuid.uuid4(), domain="sleep", key="hours", value="5_6")
+    context = build_user_context(profile, [habit])
+    assert "25-34" in context
+    assert "sleep.hours" in context
+
+
+# --- POST /chat personalization ---
+
+
+def test_send_chat_message_includes_user_context_when_profile_and_habits_exist() -> None:
+    profile = Profile(user_id=_CURRENT_USER.id, age_range="25-34", main_goal="sleep_better")
+    habit = HabitRecord(user_id=_CURRENT_USER.id, domain="sleep", key="hours", value="5_6")
+    gemini_client = _FakeGeminiClient()
+    _override(seed=[_DOCUMENT, _CHUNK, profile, habit], gemini_client=gemini_client)
+    try:
+        response = client.post("/chat", json={"message": "¿Cuánto debo dormir?"})
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 201
+    sent_prompt = gemini_client.models.calls[-1]["contents"]
+    assert "25-34" in sent_prompt
+    assert "sleep.hours" in sent_prompt
+    assert "5_6" in sent_prompt
+
+
+def test_send_chat_message_omits_user_context_section_without_profile_or_habits() -> None:
+    gemini_client = _FakeGeminiClient()
+    _override(seed=[_DOCUMENT, _CHUNK], gemini_client=gemini_client)
+    try:
+        response = client.post("/chat", json={"message": "¿Cuánto debo dormir?"})
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 201
+    sent_prompt = gemini_client.models.calls[-1]["contents"]
+    assert "Contexto del usuario" not in sent_prompt
