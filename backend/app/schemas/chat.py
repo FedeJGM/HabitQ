@@ -31,3 +31,12 @@ class ChatResponse(BaseModel):
     conversation_id: uuid.UUID
     message: MessageOut
     sources: list[SourceOut]
+
+
+class ConversationOut(BaseModel):
+    id: uuid.UUID
+    title: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

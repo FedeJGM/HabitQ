@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 from google.genai import errors as genai_errors
+from sqlalchemy.sql import operators
 
 from app.api import deps
 from app.main import app
@@ -20,7 +21,37 @@ class _FakeQuery:
     def __init__(self, results: list[object]) -> None:
         self._results = results
 
-    def filter(self, *args, **kwargs) -> "_FakeQuery":
+    def filter(self, *clauses) -> "_FakeQuery":
+        # Interprets simple `Column == value` and `Column.in_(...)` clauses
+        # well enough for multi-row queries (e.g. list_conversations,
+        # the sources lookup in send_message) that genuinely need
+        # server-side filtering, unlike the single-object lookups elsewhere
+        # that re-check ownership in Python after fetching by id.
+        results = list(self._results)
+        for clause in clauses:
+            key = getattr(getattr(clause, "left", None), "key", None)
+            if key is None:
+                continue
+            right = getattr(clause, "right", None)
+            value = getattr(right, "value", right)
+            if getattr(clause, "operator", None) is operators.in_op:
+                results = [obj for obj in results if getattr(obj, key, None) in value]
+            else:
+                results = [obj for obj in results if getattr(obj, key, None) == value]
+        self._results = results
+        return self
+
+    def order_by(self, *clauses) -> "_FakeQuery":
+        # Interprets real SQLAlchemy .asc()/.desc() clauses well enough to
+        # verify the service actually orders results, not just that it
+        # returns the right set.
+        results = list(self._results)
+        for clause in reversed(clauses):
+            element = getattr(clause, "element", clause)
+            key = element.key
+            descending = "desc" in str(getattr(clause, "modifier", "")).lower()
+            results.sort(key=lambda obj: getattr(obj, key), reverse=descending)
+        self._results = results
         return self
 
     def all(self) -> list[object]:
@@ -60,6 +91,9 @@ class _FakeDb:
         for obj in self.added:
             if getattr(obj, "id", None) is None:
                 obj.id = uuid.uuid4()
+
+    def delete(self, obj: object) -> None:
+        self.added = [existing for existing in self.added if existing is not obj]
 
 
 class _FakeTokenizer:
@@ -264,3 +298,133 @@ def test_send_chat_message_does_not_touch_existing_conversation_when_gemini_fail
 
     assert response.status_code == 502
     assert not any(isinstance(obj, Message) for obj in fake_db.added)
+
+
+# --- GET /chat/conversations ---
+
+
+def test_list_conversations_requires_auth() -> None:
+    response = client.get("/chat/conversations")
+    assert response.status_code == 401
+
+
+def test_list_conversations_returns_only_current_users_conversations_newest_first() -> None:
+    older = Conversation(
+        id=uuid.uuid4(),
+        user_id=_CURRENT_USER.id,
+        title=None,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
+    )
+    newer = Conversation(
+        id=uuid.uuid4(),
+        user_id=_CURRENT_USER.id,
+        title=None,
+        created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 1, 5, tzinfo=timezone.utc),
+    )
+    other_users = Conversation(
+        id=uuid.uuid4(),
+        user_id=_OTHER_USER_ID,
+        title=None,
+        created_at=datetime(2026, 1, 6, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 1, 6, tzinfo=timezone.utc),
+    )
+    _override(seed=[older, newer, other_users])
+    try:
+        response = client.get("/chat/conversations")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [c["id"] for c in body] == [str(newer.id), str(older.id)]
+
+
+# --- GET /chat/conversations/{id}/messages ---
+
+
+def test_list_conversation_messages_returns_404_for_unknown_conversation() -> None:
+    _override()
+    try:
+        response = client.get(f"/chat/conversations/{uuid.uuid4()}/messages")
+    finally:
+        _clear_overrides()
+    assert response.status_code == 404
+
+
+def test_list_conversation_messages_returns_404_for_another_users_conversation() -> None:
+    other_conversation = Conversation(id=uuid.uuid4(), user_id=_OTHER_USER_ID, title=None)
+    _override(seed=[other_conversation])
+    try:
+        response = client.get(f"/chat/conversations/{other_conversation.id}/messages")
+    finally:
+        _clear_overrides()
+    assert response.status_code == 404
+
+
+def test_list_conversation_messages_returns_them_in_chronological_order() -> None:
+    conversation = Conversation(id=uuid.uuid4(), user_id=_CURRENT_USER.id, title=None)
+    first = Message(
+        id=uuid.uuid4(),
+        conversation_id=conversation.id,
+        role="user",
+        content="¿Cuánto debo dormir?",
+        created_at=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+    )
+    second = Message(
+        id=uuid.uuid4(),
+        conversation_id=conversation.id,
+        role="assistant",
+        content="Entre 7 y 9 horas.",
+        created_at=datetime(2026, 1, 1, 10, 0, 5, tzinfo=timezone.utc),
+    )
+    _override(seed=[conversation, second, first])  # seeded out of order on purpose
+    try:
+        response = client.get(f"/chat/conversations/{conversation.id}/messages")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [m["id"] for m in body] == [str(first.id), str(second.id)]
+
+
+# --- DELETE /chat/conversations/{id} ---
+
+
+def test_delete_conversation_returns_404_for_unknown_conversation() -> None:
+    fake_db = _override()
+    try:
+        response = client.delete(f"/chat/conversations/{uuid.uuid4()}")
+    finally:
+        _clear_overrides()
+    assert response.status_code == 404
+    assert fake_db.added == []
+
+
+def test_delete_conversation_returns_404_for_another_users_conversation() -> None:
+    other_conversation = Conversation(id=uuid.uuid4(), user_id=_OTHER_USER_ID, title=None)
+    fake_db = _override(seed=[other_conversation])
+    try:
+        response = client.delete(f"/chat/conversations/{other_conversation.id}")
+    finally:
+        _clear_overrides()
+    assert response.status_code == 404
+    assert other_conversation in fake_db.added
+
+
+def test_delete_conversation_removes_it_and_its_messages() -> None:
+    conversation = Conversation(id=uuid.uuid4(), user_id=_CURRENT_USER.id, title=None)
+    message = Message(
+        id=uuid.uuid4(), conversation_id=conversation.id, role="user", content="hola"
+    )
+    fake_db = _override(seed=[conversation, message])
+    try:
+        response = client.delete(f"/chat/conversations/{conversation.id}")
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 204
+    assert conversation not in fake_db.added
+    assert message not in fake_db.added
