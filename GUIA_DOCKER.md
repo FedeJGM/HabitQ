@@ -97,6 +97,14 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 > el registro OAuth de tipo **Android** — ver el paso 7 (manual, fuera de
 > Docker).
 
+> **Importante — acción del dueño del proyecto de Google Cloud (vos, no tu
+> compañero):** mientras el OAuth consent screen esté en modo "Testing",
+> **solo pueden iniciar sesión las cuentas agregadas como "Test user"**.
+> Antes de que tu compañero pruebe el login, agregá su Gmail en Google
+> Cloud Console → **APIs & Services → OAuth consent screen → Test users**.
+> Sin este paso, su login falla con `access_denied` aunque haya registrado
+> correctamente su propio OAuth Android (paso 8) con su SHA-1.
+
 ---
 
 ## 4. Levantar backend + Postgres
@@ -182,6 +190,14 @@ docker compose exec backend python ingestion/scripts/ingest.py
 > imagen del backend junto con `app/` (verificar con
 > `docker compose exec backend ls ingestion/scripts` si da error de
 > "No such file or directory").
+
+> **Sin este paso, el chat no tiene nada que recuperar.** La base de datos
+> en Docker arranca vacía (sin filas en `scientific_documents` ni
+> `document_chunks`). `POST /chat` va a seguir respondiendo (Gemini
+> contesta igual), pero **sin fuentes citadas** en la respuesta, porque no
+> hay documentos indexados sobre los que buscar. Para probar el
+> comportamiento real del RAG (con fuentes), correr la ingesta antes de
+> probar el chat.
 
 ---
 
