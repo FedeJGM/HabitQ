@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'core/theme/app_theme.dart';
+import 'features/auth/auth_service.dart';
 import 'features/auth/login_screen.dart';
 import 'features/chat/chat_screen.dart';
 import 'features/chat/conversation_history_screen.dart';
@@ -25,12 +27,13 @@ class AppRoutes {
 
   static Map<String, WidgetBuilder> get table => {
         login: (_) => const LoginScreen(),
-        consent: (_) => const ConsentScreen(),
+        // Consent keeps its pre-redesign look: scope it to the legacy theme.
+        consent: (_) => Theme(data: AppTheme.legacy, child: const ConsentScreen()),
         onboarding: (_) => const OnboardingScreen(),
         onboardingHabits: (_) => const OnboardingHabitsScreen(),
         home: (_) => const HomeScreen(),
         habits: (_) => const HabitsScreen(),
-        profile: (_) => const ProfileScreen(),
+        profile: (_) => ProfileScreen(authService: AuthService()),
         chat: (_) => const ChatScreen(),
         chatHistory: (_) => const ConversationHistoryScreen(),
       };

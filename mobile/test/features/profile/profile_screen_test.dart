@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/networking/api_client.dart';
+import 'package:mobile/features/auth/auth_service.dart';
+import 'package:mobile/features/auth/user.dart';
 import 'package:mobile/features/profile/profile_screen.dart';
 import 'package:mobile/features/profile/profile_service.dart';
 
@@ -26,6 +28,23 @@ class _FakeProfileService implements ProfileService {
     if (saveError != null) throw saveError!;
     profile = UserProfile(id: 'p1', userId: 'u1', ageRange: ageRange, mainGoal: mainGoal);
     return profile!;
+  }
+}
+
+class _FakeAuthService extends AuthService {
+  bool signOutCalled = false;
+
+  @override
+  Future<HabitQUser> fetchCurrentUser() async => const HabitQUser(
+        id: 'u1',
+        email: 'diego@habitq.co',
+        name: 'Diego Alejandro',
+        onboardingCompleted: true,
+      );
+
+  @override
+  Future<void> signOut() async {
+    signOutCalled = true;
   }
 }
 
@@ -105,5 +124,36 @@ void main() {
     expect(find.text('No se pudo guardar el cambio.'), findsOneWidget);
     final oldAgeChip = tester.widget<ChoiceChip>(find.byKey(const ValueKey('age:25-34')));
     expect(oldAgeChip.selected, isTrue);
+  });
+
+  testWidgets('shows the Mi perfil title, user identity and bottom navigation', (tester) async {
+    final fakeService = _FakeProfileService(profile: initialProfile);
+    await tester.pumpWidget(MaterialApp(
+      home: ProfileScreen(profileService: fakeService, authService: _FakeAuthService()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mi perfil'), findsOneWidget);
+    expect(find.text('Diego Alejandro'), findsOneWidget);
+    expect(find.text('diego@habitq.co'), findsOneWidget);
+    expect(find.text('DA'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
+  testWidgets('Cerrar sesión button signs out', (tester) async {
+    final fakeService = _FakeProfileService(profile: initialProfile);
+    final fakeAuth = _FakeAuthService();
+    await tester.pumpWidget(MaterialApp(
+      routes: {'/login': (_) => const Scaffold(body: Text('Login'))},
+      home: ProfileScreen(profileService: fakeService, authService: fakeAuth),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Cerrar sesión'));
+    await tester.tap(find.text('Cerrar sesión'));
+    await tester.pumpAndSettle();
+
+    expect(fakeAuth.signOutCalled, isTrue);
+    expect(find.text('Login'), findsOneWidget);
   });
 }

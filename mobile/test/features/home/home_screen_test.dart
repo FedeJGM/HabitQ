@@ -51,6 +51,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('¡Hola, Alice!'), findsOneWidget);
+    expect(find.text('Es un nuevo día.'), findsOneWidget);
+  });
+
+  testWidgets('does not show a task list (no daily tasks in the backend)', (tester) async {
+    final fakeService = _FakeAuthService(userToReturn: alice);
+    await tester.pumpWidget(buildApp(fakeService));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create a new task'), findsNothing);
+    expect(find.text('Tomar agua'), findsNothing);
+  });
+
+  testWidgets('shows the bottom navigation with Inicio, Chat and Perfil', (tester) async {
+    final fakeService = _FakeAuthService(userToReturn: alice);
+    await tester.pumpWidget(buildApp(fakeService));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Inicio'), findsOneWidget);
   });
 
   testWidgets('shows an error message when fetching the user fails', (tester) async {

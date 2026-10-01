@@ -55,27 +55,30 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 24),
-              const _WelcomeIllustration(),
               const SizedBox(height: 32),
-              RichText(
-                textAlign: TextAlign.left,
-                text: TextSpan(
-                  style: Theme.of(context).textTheme.headlineSmall,
-                  children: const [
-                    TextSpan(text: '¡Bienvenido de vuelta! a '),
-                    TextSpan(
-                      text: 'HabitQ',
-                      style: TextStyle(color: AppColors.primary),
-                    ),
-                  ],
+              const _WelcomeIllustration(),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 22),
+                child: RichText(
+                  textAlign: TextAlign.left,
+                  text: TextSpan(
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    children: const [
+                      TextSpan(text: '¡Bienvenido de vuelta! a '),
+                      TextSpan(
+                        text: 'HabitQ',
+                        style: TextStyle(color: AppColors.primary),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 48),
               if (_errorMessage != null) ...[
                 Text(
                   _errorMessage!,
@@ -83,18 +86,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
               ],
-              ElevatedButton.icon(
+              OutlinedButton.icon(
                 onPressed: _authService.isLoading ? null : _handleGoogleSignIn,
                 icon: _authService.isLoading
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.g_mobiledata, size: 28),
+                    : Image.asset('assets/images/google.png', width: 18, height: 18),
                 label: const Text('Continúa con Google'),
               ),
             ],
@@ -105,24 +105,20 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-/// Placeholder illustration matching the boceto's layout slot. Swap for the
-/// real asset (bike illustration) once exported from Figma.
 class _WelcomeIllustration extends StatelessWidget {
   const _WelcomeIllustration();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 200,
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      alignment: Alignment.center,
-      child: const Icon(
-        Icons.pedal_bike,
-        size: 72,
-        color: AppColors.primaryDark,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: AspectRatio(
+        aspectRatio: 380 / 253.333,
+        child: Image.asset(
+          'assets/images/eco_traveling.png',
+          fit: BoxFit.contain,
+          excludeFromSemantics: true,
+        ),
       ),
     );
   }

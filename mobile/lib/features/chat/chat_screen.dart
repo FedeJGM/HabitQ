@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/habitq_bottom_nav.dart';
+import '../../core/widgets/habitq_shell.dart';
 import 'chat_service.dart';
 
 class _DisplayMessage {
@@ -138,20 +140,24 @@ class _ChatScreenState extends State<ChatScreen> {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isUser ? AppColors.primary : AppColors.background,
-          border: isUser ? null : Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(16),
+          color: isUser ? AppColors.primary : Colors.white,
+          border: isUser ? null : Border.all(color: const Color(0xFF79747E), width: 0.2),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: AppShadows.card,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               message.content,
-              style: TextStyle(color: isUser ? Colors.white : AppColors.textPrimary),
+              style: TextStyle(
+                fontSize: 13,
+                color: isUser ? Colors.white : AppColors.textPrimary,
+              ),
             ),
             if (message.sources.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -171,84 +177,109 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chat con HabitQ'),
-        actions: [
-          IconButton(
-            onPressed: () => Navigator.of(context).pushNamed(AppRoutes.chatHistory),
-            icon: const Icon(Icons.history),
-            tooltip: 'Historial de conversaciones',
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: _isLoadingHistory
-                  ? const Center(child: CircularProgressIndicator())
-                  : _messages.isEmpty
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Text(
-                          'Preguntame lo que quieras sobre hábitos saludables.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _messages.length + (_isSending ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index >= _messages.length) {
-                          return const Align(
-                            alignment: Alignment.centerLeft,
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            ),
-                          );
-                        }
-                        return _buildBubble(_messages[index]);
-                      },
-                    ),
+    return HabitQShell(
+      currentTab: HabitQTab.chat,
+      onLogout: () => signOutAndGoToLogin(context),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+            child: Row(
+              children: [
+                const SizedBox(width: 40),
+                Expanded(
+                  child: Text(
+                    'Chat con HabitQ',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pushNamed(AppRoutes.chatHistory),
+                  icon: const Icon(Icons.history),
+                  tooltip: 'Historial de conversaciones',
+                ),
+              ],
             ),
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(_errorMessage!, style: const TextStyle(color: AppColors.error)),
+          ),
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              decoration: BoxDecoration(
+                color: const Color(0x33787878),
+                border: Border.all(color: const Color(0xFF79747E), width: 0.2),
+                borderRadius: BorderRadius.circular(12),
               ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
+              child: Column(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      decoration: const InputDecoration(
-                        hintText: 'Escribí tu pregunta...',
-                      ),
-                      onSubmitted: (_) => _handleSend(),
-                    ),
+                    child: _isLoadingHistory
+                        ? const Center(child: CircularProgressIndicator())
+                        : _messages.isEmpty
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Text(
+                                'Preguntame lo que quieras sobre hábitos saludables.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: AppColors.textSecondary),
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.all(12),
+                            itemCount: _messages.length + (_isSending ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index >= _messages.length) {
+                                return const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                                  ),
+                                );
+                              }
+                              return _buildBubble(_messages[index]);
+                            },
+                          ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: _canSend ? _handleSend : null,
-                    icon: const Icon(Icons.send),
+                  if (_errorMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Text(_errorMessage!, style: const TextStyle(color: AppColors.error)),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _controller,
+                            decoration: const InputDecoration(
+                              hintText: 'Escribí tu pregunta...',
+                            ),
+                            onSubmitted: (_) => _handleSend(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: _canSend ? _handleSend : null,
+                          icon: const Icon(Icons.send),
+                          color: AppColors.primary,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
