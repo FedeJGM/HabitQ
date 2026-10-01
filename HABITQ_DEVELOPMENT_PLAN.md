@@ -32,7 +32,7 @@ FastAPI
   ↓
 RAG
   ↓
-PostgreSQL + pgvector
+PostgreSQL (ARRAY(FLOAT) + similitud coseno)
   ↓
 Evidencia científica
   ↓
@@ -112,7 +112,7 @@ Fuentes verificables
 | Android | Android SDK / Android Studio |
 | Backend | FastAPI + Python |
 | Base de datos | PostgreSQL |
-| Búsqueda vectorial | pgvector |
+| Búsqueda vectorial | PostgreSQL `ARRAY(FLOAT)` + similitud coseno en Python (fallback, ver nota) |
 | ORM | SQLAlchemy |
 | Migraciones | Alembic |
 | Autenticación | Google Sign-In + JWT HabitQ |
@@ -135,12 +135,14 @@ Fuentes verificables
 2. No usar Spring Boot.
 3. No usar Firebase como backend principal.
 4. No usar una base vectorial adicional.
-5. PostgreSQL + pgvector será la única base de datos.
+5. PostgreSQL será la única base de datos.
 6. Gemini será el LLM principal por las limitaciones de hardware.
 7. Ollama no será requisito del MVP.
 8. Los embeddings se generan localmente.
 9. Los PDFs se almacenan localmente.
 10. Flutter nunca se conecta directamente a PostgreSQL.
+
+**Nota (2026-09-01):** `pgvector` no está disponible en el entorno de desarrollo actual (confirmado ausente en Stack Builder/Spatial Extensions y en el instalador específico de PostgreSQL). Fallback adoptado: la columna `embedding` de `document_chunks` (sección 8) se implementa como `ARRAY(FLOAT)`, con similitud coseno calculada en Python. Viable dado el corpus chico previsto (20-40 documentos, sección 13). Detalle completo en `docs/decisions.md` y `docs/rag-chat-progress.md`.
 
 ---
 
@@ -160,7 +162,7 @@ Fuentes verificables
    │    │               │
    ▼    ▼               ▼
  Auth PostgreSQL       RAG Service
-       + pgvector       │
+       (ARRAY(FLOAT))   │
                         ├── PyMuPDF
                         ├── sentence-transformers
                         └── Gemini
@@ -197,7 +199,7 @@ Responsable principal de:
 - Python.
 - FastAPI.
 - PostgreSQL.
-- pgvector.
+- ARRAY(FLOAT) + similitud coseno.
 - SQLAlchemy.
 - Alembic.
 - Google token validation.
@@ -404,7 +406,7 @@ document_id UUID FK scientific_documents.id
 content TEXT
 page_number INTEGER NULL
 chunk_index INTEGER
-embedding VECTOR
+embedding ARRAY(FLOAT)
 ```
 
 ---
@@ -577,7 +579,7 @@ Chunking
  ↓
 Embeddings
  ↓
-pgvector
+PostgreSQL (ARRAY(FLOAT))
 ```
 
 ## Consulta
@@ -741,7 +743,7 @@ Una tarea puede marcarse `Done` solamente si:
 - PDFs.
 - Ingesta.
 - Embeddings.
-- pgvector.
+- ARRAY(FLOAT) + similitud coseno.
 - Retrieval.
 - Gemini.
 - Chat.
@@ -1005,7 +1007,7 @@ P2: instalar sentence-transformers y generar primer embedding.
 P1: componente tarjeta de fuente.
 
 ### Viernes 2
-P2: configurar pgvector.  
+P2: configurar ARRAY(FLOAT) + similitud coseno.  
 P1: pantalla historial.
 
 ### Sábado 3
@@ -1026,7 +1028,7 @@ P2: implementar embedding de pregunta.
 P1: terminar Chat UI.
 
 ### Martes 6
-P2: similarity search en pgvector.  
+P2: similarity search en ARRAY(FLOAT) + similitud coseno.  
 P1: integración inicial `POST /chat`.
 
 ### Miércoles 7
@@ -1163,7 +1165,7 @@ Checklist:
 - APK.
 - Backend funcional.
 - PostgreSQL.
-- pgvector.
+- ARRAY(FLOAT) + similitud coseno.
 - RAG.
 - Google Login.
 - Historial.
@@ -1204,7 +1206,7 @@ Git básico
 → SQL/PostgreSQL
 → SQLAlchemy
 → JWT
-→ pgvector
+→ ARRAY(FLOAT) + similitud coseno
 → RAG
 → Gemini
 → testing
@@ -1233,20 +1235,20 @@ No estudiar Python completo antes de comenzar.
 
 La aplicación se considera funcional si:
 
-- [ ] APK se instala en Android.
-- [ ] Usuario inicia sesión con Google.
-- [ ] Usuario completa onboarding.
-- [ ] Perfil se guarda.
-- [ ] Hábitos se guardan y actualizan.
-- [ ] Usuario abre Chat.
-- [ ] Pregunta llega a FastAPI.
-- [ ] RAG recupera evidencia.
-- [ ] Gemini genera respuesta.
-- [ ] Respuesta utiliza información recuperada.
-- [ ] Se muestran fuentes.
-- [ ] Conversación queda guardada.
-- [ ] Usuario consulta historial.
-- [ ] Un usuario no accede a información de otro.
+- [ ] APK se instala en Android. *(build anterior verificado antes de Fase 3; pendiente confirmar con el código actual)*
+- [x] Usuario inicia sesión con Google.
+- [x] Usuario completa onboarding.
+- [x] Perfil se guarda.
+- [x] Hábitos se guardan y actualizan.
+- [x] Usuario abre Chat.
+- [x] Pregunta llega a FastAPI.
+- [x] RAG recupera evidencia.
+- [x] Gemini genera respuesta.
+- [x] Respuesta utiliza información recuperada.
+- [x] Se muestran fuentes.
+- [x] Conversación queda guardada.
+- [x] Usuario consulta historial.
+- [x] Un usuario no accede a información de otro.
 - [ ] Errores externos no cierran la aplicación.
 - [ ] Backend puede exponerse mediante Cloudflare Tunnel.
 

@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg[binary]
+alembic
+python-dotenv
+pydantic
+pydantic-settings
+pytest
+httpx
+pyjwt
+google-auth
+requests
+pymupdf
+sentence-transformers
+google-genai
