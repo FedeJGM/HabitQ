@@ -7,6 +7,7 @@
 backend/.venv/
 backend/__pycache__/
 backend/**/__pycache__/
+ingestion/**/__pycache__/
 backend/.pytest_cache/
 
 # Mobile (Flutter)
