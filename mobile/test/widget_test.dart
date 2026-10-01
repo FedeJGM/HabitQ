@@ -8,4 +8,12 @@ void main() {
 
     expect(find.text('Continúa con Google'), findsOneWidget);
   });
+
+  testWidgets('login shows the welcome copy and no sign-up link', (WidgetTester tester) async {
+    await tester.pumpWidget(const HabitQApp());
+
+    expect(find.textContaining('Bienvenido de vuelta', findRichText: true), findsOneWidget);
+    expect(find.textContaining('Regístrate', findRichText: true), findsNothing);
+    expect(find.textContaining('Registrate', findRichText: true), findsNothing);
+  });
 }
