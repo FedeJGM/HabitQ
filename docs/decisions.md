@@ -1,0 +1,185 @@
+# Decisiones de arquitectura y producto
+
+Registro de decisiones tomadas durante la implementación que **no** estaban explícitamente definidas en `HABITQ_DEVELOPMENT_PLAN.md`, o que resuelven una ambigüedad/conflicto del plan. Formato corto: contexto → decisión → alternativas → consecuencias. Todas fechadas 2026-09-01 salvo que se indique lo contrario.
+
+---
+
+## D-01 — Autenticación de endpoints vía `get_current_user`
+
+**Contexto:** el plan exige que ningún endpoint confíe en un `user_id` enviado por el cliente (sección 10), pero no detalla el mecanismo.
+
+**Decisión:** dependency de FastAPI (`get_current_user` en `app/api/deps.py`) que decodifica el JWT con `HTTPBearer`, castea el claim `sub` a UUID, y busca el usuario en base. 401 si el token es inválido/expirado o el usuario no existe.
+
+**Consecuencias:** todo endpoint privado nuevo reutiliza esta única dependency — no hay lógica de auth duplicada.
+
+---
+
+## D-02 — `profiles`: una fila por usuario, `PUT` hace upsert
+
+**Contexto:** el plan define `GET/PUT /profile` (sección 9) sin `POST`, pero no aclara si puede haber múltiples perfiles por usuario.
+
+**Decisión:** `profiles.user_id` es `UNIQUE`. `PUT /profile` crea la fila si no existe o actualiza la existente.
+
+**Alternativas consideradas:** exigir `POST` primero y `PUT` solo para editar — descartada porque el plan no expone `POST /profile`.
+
+---
+
+## D-03 — `habit_records`: log append-only, no upsert
+
+**Contexto:** el modelo tiene `recorded_at` *y* `updated_at` por separado (plan, sección 8), y la API expone `POST /habits` + `PUT /habits/{id}` por separado (a diferencia de `profiles`).
+
+**Decisión:** `POST /habits` **siempre** crea una fila nueva (nunca actualiza una existente con la misma `domain`/`key`). `PUT /habits/{id}` solo edita una fila ya existente, identificada por su `id`.
+
+**Consecuencias:** un usuario puede, en teoría, tener múltiples registros históricos para la misma pregunta si se llamara `POST /habits` más de una vez con la misma `key` — no ocurre en el flujo actual (el onboarding solo llama `POST` una vez por pregunta), pero cualquier futura feature que reutilice `POST /habits` debe tenerlo presente.
+
+**Validación de propiedad:** `PUT /habits/{id}` devuelve 404 (no 403) si el registro no existe o pertenece a otro usuario, para no filtrar la existencia de registros ajenos.
+
+---
+
+## D-04 — `domain` de hábitos: enum cerrado a 6 valores
+
+**Contexto:** el plan define 6 dominios de hábitos (sección 2) pero el campo `domain` en el modelo de datos es `VARCHAR` libre.
+
+**Decisión:** `app/schemas/habit_record.py` define `HabitDomain` (Enum: `sleep`, `nutrition`, `physical_activity`, `hydration`, `screen_time`, `stress`). Pydantic rechaza cualquier otro valor con 422. La columna en la base sigue siendo `VARCHAR` (validación en la capa de aplicación, no un `CHECK` de PostgreSQL).
+
+**Consecuencias:** mobile y backend deben usar exactamente estos 6 códigos en inglés — están espejados en `mobile/lib/features/habits/habit_questions.dart`.
+
+---
+
+## D-05 — Convención de `key`/`value` para respuestas de hábitos
+
+**Contexto:** `key` y `value` son `VARCHAR` libres; el plan no define códigos para las 9 preguntas del cuestionario.
+
+**Decisión:** `key` en snake_case en inglés (`hours`, `screen_before_bed`, `fruits_vegetables`, `fast_food`, `days_per_week`, `sedentary_hours`, `daily_intake`, `recreational_hours`, `frequency`). `value` como código corto (`less_5`, `5_6`, `7_8`, `more_8`, `never`/`sometimes`/`often`, etc.) en vez del texto en español mostrado en pantalla — consistente con que `domain` también son códigos en inglés.
+
+**Fuente única de verdad:** `mobile/lib/features/habits/habit_questions.dart` (compartido entre `OnboardingHabitsScreen` y `HabitsScreen` para que no diverjan).
+
+---
+
+## D-06 — Rangos de edad y objetivos de perfil: opciones fijas
+
+**Contexto:** `age_range` y `main_goal` son `VARCHAR` libres; el plan no define opciones.
+
+**Decisión:** 5 rangos de edad fijos (`18-24` … `55+`) y 6 objetivos fijos, mapeados 1:1 a los dominios de hábitos (`sleep_better`, `eat_better`, `move_more`, `hydrate_more`, `reduce_screen_time`, `manage_stress`).
+
+**Fuente única de verdad:** `mobile/lib/features/profile/profile_options.dart` (compartido entre `OnboardingScreen` y `ProfileScreen`).
+
+**Pendiente:** si existe un mockup de Figma con una taxonomía distinta, esta decisión debería revisarse.
+
+---
+
+## D-07 — Home sigue el plan escrito, no el mockup con gamificación
+
+**Contexto:** `Diseño/Inicio.png` incluye una tarjeta de logro/racha ("Felicitaciones! Te has levantado antes de las 8:30 tres días seguidos"), un badge "+100AC" y un tab "Actividad" — pero el plan (sección 2, "Fuera del MVP") excluye explícitamente Gamificación, Puntos, Logros, Retos, Rankings, Dashboards y Gráficos de progreso. El mockup también nombra al asistente "Carmelo" en vez de "HabitQ".
+
+**Decisión (confirmada explícitamente por el usuario, no asumida):** la pantalla Home implementada sigue el plan escrito. Sin logros, sin racha, sin tab de estadísticas.
+
+**Consecuencias:** cualquier otro mockup en `Diseño/` debe revisarse con el mismo criterio antes de implementarlo — puede reflejar una exploración visual anterior al recorte de alcance del MVP.
+
+---
+
+## D-08 — Consentimiento inicial: persistencia local, no en backend
+
+**Contexto:** el plan lista "Consentimiento inicial" como incluido en el MVP (sección 2) sin especificar diseño ni persistencia.
+
+**Decisión (confirmada explícitamente por el usuario):** el flag de aceptación se guarda solo en el dispositivo (secure storage), no en el backend. No se agregó columna a `users` ni migración.
+
+**Alternativas consideradas:** persistir `consent_accepted_at` en `users` — descartada por el usuario para mantener el alcance mínimo.
+
+**Consecuencias:** un usuario que reinstale la app o cambie de dispositivo vuelve a ver la pantalla de consentimiento aunque su cuenta ya la haya aceptado antes. Aceptable para el MVP.
+
+**Pendiente:** el texto del consentimiento (`mobile/lib/features/consent/consent_screen.dart`) fue redactado por Claude como borrador — el usuario debe revisarlo/ajustarlo antes de la entrega final.
+
+---
+
+## D-09 — `/auth/refresh` sin tabla de refresh tokens separada
+
+**Contexto:** el plan lista `POST /auth/refresh` en la API mínima (sección 9), pero el modelo de datos (sección 8) no incluye ninguna tabla de sesiones/refresh tokens.
+
+**Decisión:** `/auth/refresh` reemite un JWT nuevo a partir de uno todavía válido (mismo mecanismo que cualquier endpoint protegido: `get_current_user` + `create_access_token`). No es un refresh token clásico de larga duración — es, en la práctica, "renovar mientras la sesión actual siga viva".
+
+**Justificación:** consistente con la regla del plan "no comenzar con arquitectura compleja" (sección 20).
+
+---
+
+## D-10 — `/auth/logout` no invalida el JWT server-side
+
+**Contexto:** mismo problema que D-09 — no hay tabla de sesiones/blacklist.
+
+**Decisión:** `/auth/logout` exige un JWT válido (protegido) y devuelve 204, pero no tiene ningún efecto sobre la validez del token — el backend no tiene forma de revocarlo. La limitación está documentada como comentario en el código (`backend/app/api/routes/auth.py`).
+
+**Mitigación real:** el cliente (`AuthService.signOut()`) llama a este endpoint best-effort y luego borra el JWT localmente — la sesión termina ahí, no porque el backend lo haya invalidado.
+
+---
+
+## D-11 — Código dependiente de `FlutterSecureStorage` no se testea directamente
+
+**Contexto:** se necesitaba decidir el nivel de testing para `AuthService.signOut()`, `TokenStorage`, `ConsentStorage`.
+
+**Decisión, con evidencia empírica:** se probó que una llamada real a `FlutterSecureStorage` sin mock, ejecutada dentro de un `testWidgets()`, **cuelga el test indefinidamente** (no lanza excepción). Por eso ninguno de estos tres componentes tiene un test unitario que ejercite su cuerpo real — se verifican indirectamente a través de los fakes que las pantallas que los consumen inyectan por constructor.
+
+**Consecuencias para el equipo:** cualquier código nuevo que use `FlutterSecureStorage` directamente debe seguir el mismo patrón de inyección (parámetro opcional en el constructor con fallback a la instancia real) para permanecer testeable — nunca ejercitar la ruta real dentro de un test.
+
+---
+
+## D-12 — Chunking usa el tokenizer real del modelo de embeddings, no una aproximación
+
+**Contexto:** el plan (sección 12) define los límites de chunking en tokens (800-1200, overlap 100-150), pero no especifica cómo contar "tokens" — la opción más simple habría sido aproximar por palabras, o agregar una librería de tokenización nueva (ej. `tiktoken`, pensada para modelos OpenAI).
+
+**Decisión:** `chunk_text` (`backend/app/services/ingestion_service.py`) recibe un `tokenize: Callable[[str], list]` inyectado. En producción, `ingest_document` le pasa `model.tokenizer.encode` — el tokenizer real de `sentence-transformers` (`all-MiniLM-L6-v2`), que ya está disponible sin instalar nada adicional.
+
+**Justificación:** los límites de chunk deben corresponder al tokenizer que realmente va a procesar ese texto al generar el embedding — una aproximación por palabras o un tokenizer de otro modelo (`tiktoken`/OpenAI) puede desviarse significativamente del conteo real, sub- o sobre-llenando chunks respecto al límite de contexto del modelo.
+
+**Cómo se cuenta sin decodificar:** en vez de tokenizar el texto completo y decodificar cada ventana de vuelta a texto (lo cual con un tokenizer WordPiece no reconstruye el texto original de forma confiable), se tokeniza cada palabra por separado una sola vez y se usa la suma acumulada de esos conteos para decidir los límites de cada chunk sobre el texto partido por palabras (`text.split()`). El chunk resultante se reconstruye con `" ".join(...)`, siempre exacto. Es una aproximación (ignora que un tokenizer subword puede fusionar tokens en los bordes entre palabras), aceptable para un límite de tamaño de chunk, no para un conteo exacto.
+
+**Testing:** los tests de `chunk_text` inyectan un fake (`str.split` aplicado por palabra) en vez de cargar el modelo real — evita lentitud y dependencia de red en la suite.
+
+---
+
+## D-13 — Refresco de JWT proactivo en mobile, no reactivo
+
+**Contexto:** el gap pendiente de "interceptor de refresh token" (mobile no llama a `POST /auth/refresh` en ningún momento) se planteó inicialmente como un interceptor reactivo clásico (reintentar la request tras un 401). Eso no funciona con este backend: según D-09, `/auth/refresh` reemite un JWT nuevo a partir de uno **todavía válido** — usa el mismo mecanismo (`get_current_user`) que cualquier endpoint protegido. Si el JWT ya expiró y una request cualquiera devuelve 401, llamar a `/auth/refresh` con ese mismo token expirado también devuelve 401.
+
+**Decisión:** refresco proactivo, no reactivo. `AuthService.refreshTokenIfNeeded()` (`mobile/lib/features/auth/auth_service.dart`) decodifica el `exp` del JWT guardado (`mobile/lib/core/utils/jwt.dart`, decode manual sin dependencia nueva — no verifica firma, solo lee el payload) y, si falta menos de 60 minutos para que expire (o ya expiró), llama a `/auth/refresh` y guarda el token nuevo. Se dispara en `mobile/lib/main.dart`: una vez al arrancar (`initState`, en la práctica casi siempre no-op) y cada vez que la app vuelve a primer plano (`AppLifecycleState.resumed`, vía `WidgetsBindingObserver`) — el caso real es la app backgroundeada durante horas con una sesión ya iniciada.
+
+**Si el refresh también falla** (token ya vencido hace rato): se borra el token guardado (`TokenStorage.delete()`) en vez de dejarlo indefinidamente. No hay pantalla de auto-login que redirigir — la app hoy siempre arranca en `LoginScreen` (`initialRoute` fijo en `main.dart`), así que no hace falta navegar desde acá; la siguiente pantalla que llame a la API va a fallar igual, pero al menos no queda un JWT muerto en storage.
+
+**Limpieza en el camino:** `AuthService` tenía su propia instancia de `FlutterSecureStorage` y una constante `_tokenKey` duplicada con `TokenStorage.key` (el comentario en `token_storage.dart` ya advertía "must stay in sync"). Se unificó: `AuthService` ahora recibe un `TokenStorage` inyectable (mismo patrón de D-11) y usa sus métodos `read()`/`write()`/`delete()` en vez de tocar `FlutterSecureStorage` directamente.
+
+**Testing:** siguiendo D-11, ningún test ejercita `FlutterSecureStorage` real. Los fakes (`_FakeTokenStorage implements TokenStorage`, mismo patrón que `_FakeApiClient implements ApiClient`) solo necesitan implementar `read()`/`write()`/`delete()` — los miembros privados de `TokenStorage` no forman parte de la interfaz que Dart exige implementar. Se confirmó empíricamente que la llamada fire-and-forget a `refreshTokenIfNeeded()` en `initState()` de `HabitQApp`, incluso con el `AuthService()` real por default, no cuelga el widget test existente (`widget_test.dart`) — a diferencia del caso descrito en D-11, acá nunca se espera (`await`) esa llamada desde el widget.
+
+---
+
+## D-14 — Nombre de modelo Gemini: usar el alias `gemini-flash-latest`, no una versión fija
+
+**Contexto:** al integrar `google-genai` (2026-09-02) para el servicio de LLM (`backend/app/services/llm_service.py`), el nombre de modelo que aparecía en ejemplos/documentación al momento de escribir el código (`gemini-2.0-flash`) ya no existe — la API devuelve 404 y sugiere migrar a un modelo más nuevo. Probar `gemini-2.5-flash` tampoco funcionó: 404, "no longer available to new users" (la API key de este proyecto es nueva). Los modelos de Google evolucionan más rápido de lo que cualquier nombre fijo escrito en código puede seguir.
+
+**Decisión:** usar el alias `gemini-flash-latest` (no una versión numerada como `gemini-3.6-flash` o similar) como `_MODEL` en `llm_service.py`. Google mantiene este alias apuntando siempre al modelo flash estable más reciente disponible para la cuenta — evita que el código se rompa cada vez que Google retira una versión.
+
+**Nota sobre errores 503 ("high demand"):** son transitorios y esperables en el tier gratuito — no indican un problema de código, config o de la API key. Se confirmó reintentando: la misma llamada que falló 3 veces seguidas funcionó al reintentar. `generate_answer` (P2-3) no implementa retry/backoff todavía — es un ítem separado y explícito del roadmap ("manejo errores Gemini", Fase 4), no de este paso.
+
+**Cómo verificar el modelo correcto en el futuro** (si `gemini-flash-latest` alguna vez deja de existir): `client.models.list()` filtrando por `'generateContent' in m.supported_actions` devuelve los modelos realmente disponibles para esa API key — más confiable que cualquier nombre hardcodeado en documentación o en este archivo.
+
+---
+
+## D-15 — Personalización con perfil/hábitos: el LLM decide la relevancia, no se clasifica programáticamente
+
+**Contexto:** el plan (sección 14) pide "personalizar solo cuando el perfil sea relevante", sin especificar cómo decidir esa relevancia. La alternativa habría sido clasificar la pregunta del usuario para decidir si aplica personalización antes de llamar a Gemini (otro paso de NLP, otra fuente de error).
+
+**Decisión:** mismo criterio ya usado con el contexto de RAG (ver D-14 y `llm_service._SYSTEM_INSTRUCTIONS`): `chat_service.send_message` siempre arma el `user_context` (perfil + hábitos del usuario, si existen — `build_user_context`) y se lo pasa a `generate_answer`, pero la instrucción explícita al modelo es usarlo *solo si es relevante para la pregunta* y no mencionarlo si no viene al caso. No hay clasificación previa de relevancia en el backend.
+
+**Formato del contexto:** texto simple, sin humanizar los códigos de `habit_records` (`domain`/`key`/`value`, ej. `sleep.hours: 5_6`) — esa tabla de humanización (a texto legible en español) solo existe en `mobile/lib/features/habits/habit_questions.dart`, no se replicó en el backend para evitar duplicar la fuente de verdad.
+
+**Verificado con una llamada real:** con un usuario real (perfil `18-24`/`sleep_better`, 9 hábitos cargados) y la pregunta "¿Qué puedo hacer para dormir mejor?", Gemini referenció correctamente el hábito `sleep.hours=5_6` en la respuesta ("tus registros indican que estás durmiendo entre 5 y 6 horas"), mientras seguía admitiendo honestamente que el contexto RAG recuperado (un documento de la OMS sobre actividad física, no de sueño) no tenía evidencia específica — mismo comportamiento de no inventar ya validado en D-14.
+
+---
+
+## D-16 — Reintento de errores de Gemini: usar `HttpRetryOptions` del SDK, no un loop propio
+
+**Contexto:** el roadmap (Fase 4) pide manejo de errores de Gemini con reintento — hasta ahora `generate_answer` dejaba que un 503 "high demand" (D-14) se propagara directo a un 502 en `POST /chat`, sin reintentar. La opción obvia habría sido envolver la llamada en un loop manual con backoff.
+
+**Decisión:** `google-genai` ya expone `types.HttpOptions(retry_options=types.HttpRetryOptions(...))`, con reintento automático sobre 408/429/5xx, backoff exponencial y jitter — por defecto `attempts=5`, `max_delay=60.0`. `get_gemini_client()` (`backend/app/services/llm_service.py`) configura `attempts=3, initial_delay=1.0, max_delay=8.0`: los defaults del SDK están pensados para un job en background, no para una request HTTP síncrona donde el usuario espera con `POST /chat` abierto — 5 intentos con hasta 60s de espera cada uno podría dejar la request colgada más de un minuto.
+
+**Por qué no un loop propio:** usar el mecanismo ya provisto por el SDK evita reimplementar backoff/jitter/clasificación de qué códigos ameritan reintento (una fuente de bugs sutiles), y mantiene `generate_answer`/`build_prompt` sin cambios — el reintento vive enteramente en la configuración del cliente.
+
+**Testing:** un test verifica que `get_gemini_client()` arma el cliente con `retry_options.attempts == 3` y `max_delay == 8.0` (inspeccionando `client._api_client._http_options`, un atributo interno del SDK — aceptado como trade-off, no hay una API pública para leerlo de vuelta). Verificado además con una llamada real exitosa después de configurar el retry.

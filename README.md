@@ -4,9 +4,26 @@ Aplicación móvil de proyecto de grado — orientación personalizada de hábit
 
 ## Alcance actual
 
-Implementado hasta ahora: pantalla de **Login con Google** (`mobile/`) y el endpoint backend que la sostiene, `POST /auth/google` (`backend/`). El resto de pantallas y endpoints del plan (Onboarding, Hábitos, Chat, RAG, etc.) todavía no están implementados.
+Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) (arquitectura y tabla de endpoints), [`docs/requirements/use-cases.md`](./docs/requirements/use-cases.md) (casos de uso) y [`docs/decisions.md`](./docs/decisions.md) (decisiones no explícitas en el plan).
 
-> **Nota de alcance:** el boceto de Figma (`Diseño/Inicio de sesión.png`) incluye un formulario de correo/contraseña. El plan (secciones 2, 3, 10, 20) excluye explícitamente el login tradicional del MVP — solo Google Sign-In. La pantalla implementada usa **solo Google**, adaptando el boceto (sin campos de correo/contraseña ni link de registro).
+**Backend (FastAPI)** — `POST /auth/google`, `GET /auth/me`, `POST /auth/onboarding-complete`, `POST /auth/refresh`, `POST /auth/logout`, `GET/PUT /profile`, `GET/POST /habits`, `PUT /habits/{id}`. Todos los endpoints privados exigen JWT válido (`get_current_user`).
+
+**Mobile (Flutter)**
+- Login con Google + consentimiento inicial (una vez por dispositivo, guardado localmente).
+- Onboarding: perfil básico (edad + objetivo principal) + cuestionario de 9 preguntas por los 6 dominios de hábitos.
+- Home: saludo, cerrar sesión, navegación a Mis Hábitos y Perfil.
+- Mis Hábitos: ver y editar los hábitos ya registrados (autosave).
+- Perfil: ver y editar edad y objetivo principal (autosave).
+- Chat con HabitQ: conversación con IA respaldada por RAG, con fuentes mostradas por cada respuesta y personalización según perfil/hábitos cuando es relevante.
+- Historial: lista de conversaciones pasadas, reabrir para continuar chateando, o borrarlas.
+
+**RAG completo (Fase 3 del plan)** — ingesta (PDF → texto → limpieza → chunking → embeddings → Postgres), retrieval (similitud coseno en Python, sin pgvector — no está disponible en el entorno de desarrollo, ver `docs/decisions.md` D-12), integración con Gemini (`POST /chat`), y persistencia de conversaciones. Verificado extremo a extremo contra Postgres y la API real de Gemini (ver [`ingestion/README.md`](./ingestion/README.md), [`docs/rag-chat-progress.md`](./docs/rag-chat-progress.md) y `docs/decisions.md` D-12 a D-15).
+
+**Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): hardening de seguridad general.
+
+> **Nota de alcance (Login):** el boceto de Figma (`Diseño/Inicio de sesión.png`) incluye un formulario de correo/contraseña. El plan (secciones 2, 3, 10, 20) excluye explícitamente el login tradicional del MVP — solo Google Sign-In. La pantalla implementada usa **solo Google**, adaptando el boceto (sin campos de correo/contraseña ni link de registro).
+>
+> **Nota de alcance (Home):** el boceto `Diseño/Inicio.png` incluye gamificación (logros, racha, badge de puntos) y un tab de estadísticas ("Actividad"), que el plan (sección 2, "Fuera del MVP") excluye explícitamente. La pantalla Home implementada sigue el plan escrito, no el boceto.
 
 ## Estructura
 
@@ -14,7 +31,9 @@ Implementado hasta ahora: pantalla de **Login con Google** (`mobile/`) y el endp
 habitq/
 ├── mobile/     # Flutter (Persona 1)
 ├── backend/    # FastAPI (Persona 2)
+├── ingestion/  # PDFs de fuentes científicas + script de ingesta RAG (ver ingestion/README.md)
 ├── Diseño/     # Bocetos de Figma exportados (PNG)
+├── docs/       # Arquitectura, diagramas, casos de uso, decisiones — ver docs/architecture/overview.md
 ├── .env.example  # Config compartida (ver abajo)
 └── HABITQ_DEVELOPMENT_PLAN.md
 ```
@@ -95,13 +114,13 @@ Verifica: `GET http://localhost:8000/health` → `{"status": "ok"}`.
 pytest
 ```
 
-Los tests no requieren `.env` ni una base de datos real: `tests/conftest.py` define valores de `DATABASE_URL`/`GOOGLE_CLIENT_ID`/`JWT_SECRET` dummy para que `Settings` se instancie sin tocar Postgres. Verificado: 3/3 pasan en limpio.
+Los tests no requieren `.env` ni una base de datos real: `tests/conftest.py` define valores de `DATABASE_URL`/`GOOGLE_CLIENT_ID`/`JWT_SECRET`/`GEMINI_API_KEY` dummy para que `Settings` se instancie sin tocar Postgres ni la API real de Gemini. Verificado: 89/89 pasan en limpio.
 
 ## Mobile (Flutter)
 
 ### 1. Instalar Flutter SDK
 
-**No se detectó Flutter instalado en esta máquina** (sí está Android Studio + Android SDK en `%LOCALAPPDATA%\Android\Sdk`). Instálalo primero:
+Ya instalado en esta máquina (`C:\src\flutter`, Flutter 3.47.2). En una máquina nueva (ej. la de tu compañero/a):
 
 1. Descarga el SDK desde https://docs.flutter.dev/get-started/install/windows y descomprímelo (ej. en `C:\src\flutter`).
 2. Agrega `C:\src\flutter\bin` a tu variable de entorno `PATH`.
@@ -109,7 +128,7 @@ Los tests no requieren `.env` ni una base de datos real: `tests/conftest.py` def
 
 ### 2. Completar el scaffolding nativo del proyecto
 
-Ya existen `mobile/pubspec.yaml` y `mobile/lib/` (código de la pantalla de Login). Faltan las carpetas nativas (`android/`, `ios/`, etc.), que solo `flutter create` puede generar correctamente:
+Ya existen `mobile/pubspec.yaml` y `mobile/lib/` (Login, Onboarding, Home, Mis Hábitos, Perfil). Faltan las carpetas nativas (`android/`, `ios/`, etc.) en una máquina nueva, que solo `flutter create` puede generar correctamente:
 
 ```bash
 cd mobile
@@ -122,13 +141,13 @@ Esto **no debería sobrescribir** `pubspec.yaml` ni `lib/` existentes (Flutter d
 flutter pub add google_sign_in http flutter_secure_storage
 ```
 
-Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa.
+Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (83 tests).
 
-### 2.1 Build de Android — bloqueo conocido en esta máquina
+### 2.1 Build de Android
 
-`flutter build apk --debug` falla al configurar el proyecto `:app` porque intenta descargar el NDK (versión `28.2.13676358`, no instalado) usando el `sdkmanager.bat` heredado del SDK, que aquí termina con un crash nativo (`NTSTATUS 0xC0000409`) — incompatibilidad entre ese binario deprecado y el JDK 25 empaquetado con Android Studio. `flutter analyze`, `flutter test` y `flutter pub get` no se ven afectados (no invocan Gradle/Android). Para desbloquear el build de Android:
+`flutter build apk --debug` funciona en esta máquina y genera `mobile/build/app/outputs/flutter-apk/app-debug.apk` (~158 MB). Si en otra máquina aparece un error al descargar el NDK (versión `28.2.13676358`) vía `sdkmanager.bat` (crash `NTSTATUS 0xC0000409`, incompatibilidad entre ese binario deprecado y JDK 25):
 
-- **Opción recomendada**: abre Android Studio → *More Actions → SDK Manager → SDK Tools* → marca "NDK (Side by side)" en la versión `28.2.13676358` → Apply. Esto usa el instalador gráfico en vez del `sdkmanager.bat` que crashea.
+- **Opción recomendada**: abre Android Studio → *More Actions → SDK Manager → SDK Tools* → marca "NDK (Side by side)" en la versión `28.2.13676358` → Apply. Esto usa el instalador gráfico en vez del `sdkmanager.bat`, que puede fallar con versiones recientes de JDK.
 - Alternativa: instala una versión de NDK ya presente vía Android Studio y fija esa versión explícitamente en `mobile/android/app/build.gradle.kts` (`ndkVersion = "<versión instalada>"`) en vez de `flutter.ndkVersion`.
 
 Ninguna dependencia del proyecto (`google_sign_in`, `flutter_secure_storage`) usa código nativo — el NDK solo lo exige la validación de Android Gradle Plugin, no una necesidad real de esta app.
@@ -143,15 +162,17 @@ flutter pub get
 flutter run --dart-define-from-file=../.env
 ```
 
-## Credenciales de Google (pendiente — requiere tu cuenta de Google Cloud)
+## Credenciales de Google
 
-El login con Google no puede probarse de extremo a extremo hasta crear credenciales reales. Application ID del proyecto Android: **`com.habitq.mobile`**.
+El login con Google ya está configurado y verificado de extremo a extremo en esta máquina. Application ID del proyecto Android: **`com.habitq.mobile`**.
+
+Cada máquina de desarrollo necesita su propio registro OAuth porque el SHA-1 del keystore de debug es distinto por máquina — si es la primera vez que configuras esto (ej. en la máquina de tu compañero/a), seguí los pasos de abajo.
 
 ### SHA-1 del keystore de debug
 
 **SHA-1 de esta máquina: `5D:C7:5C:B6:10:51:DE:80:CD:25:12:37:DE:77:B9:88:E7:26:14:70`**
 
-(Generado a mano con `keytool -genkeypair`, con los parámetros estándar del debug keystore de Android — alias `androiddebugkey`, password `android` — porque el build de Android todavía no llega a esa etapa por el bloqueo del NDK descrito arriba. Una vez el build de Android funcione, Gradle reutilizará este mismo keystore si ya existe en `%USERPROFILE%\.android\debug.keystore`, así que este SHA-1 sigue siendo válido.)
+(Del debug keystore estándar de Android en `%USERPROFILE%\.android\debug.keystore` — alias `androiddebugkey`, password `android`, generado automáticamente por Gradle en el primer build de Android en esta máquina.)
 
 En la máquina de tu compañero(a) (o si se regenera el keystore), extrae el suyo con:
 
