@@ -77,9 +77,12 @@ def _url_for(entries: list[dict], style: str) -> str | None:
 def parse_result(raw: dict, domain: str) -> CandidateData | None:
     pmcid = raw.get("pmcid")
     entries = (raw.get("fullTextUrlList") or {}).get("fullTextUrl") or []
-    pdf_url = _url_for(entries, "pdf")
-    if not pmcid or not pdf_url:
+    # Only the presence of an open access PDF matters here. The listed URL
+    # ("...?pdf=render") is the browser one, which Cloudflare blocks for
+    # non-browser clients; it redirects to this API endpoint, which works.
+    if not pmcid or not _url_for(entries, "pdf"):
         return None
+    pdf_url = f"https://europepmc.org/api/getPdf?pmcid={pmcid}"
 
     journal = ((raw.get("journalInfo") or {}).get("journal") or {}).get("title")
     pub_year = raw.get("pubYear")

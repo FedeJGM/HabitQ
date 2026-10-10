@@ -88,6 +88,8 @@ def ingest_document(
     organization: str | None = None,
     year: int | None = None,
     source_url: str | None = None,
+    doi: str | None = None,
+    domain: str | None = None,
     extract_pages_fn: Callable[[Path], list[tuple[int, str]]] = extract_pages,
 ) -> ScientificDocument:
     pages = extract_pages_fn(pdf_path)
@@ -99,11 +101,15 @@ def ingest_document(
         year=year,
         language=language,
         source_url=source_url,
+        doi=doi,
+        domain=domain,
         file_path=str(pdf_path),
     )
     db.add(document)
-    db.commit()
-    db.refresh(document)
+    # Flush (not commit) to get document.id: the document and its chunks are
+    # committed together below, so a failure while embedding leaves no orphan
+    # document without chunks behind.
+    db.flush()
 
     chunk_index = 0
     for page_number, raw_text in pages:

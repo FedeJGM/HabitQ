@@ -47,12 +47,18 @@ class _FakeQuery:
 class _FakeDb:
     def __init__(self) -> None:
         self.added: list[object] = []
+        self.commits = 0
 
     def add(self, obj: object) -> None:
         self.added.append(obj)
 
+    def flush(self) -> None:
+        for obj in self.added:
+            if getattr(obj, "id", None) is None:
+                obj.id = uuid.uuid4()
+
     def commit(self) -> None:
-        pass
+        self.commits += 1
 
     def refresh(self, obj: object) -> None:
         if getattr(obj, "id", None) is None:
@@ -165,6 +171,59 @@ def test_ingest_document_creates_document_and_chunks() -> None:
     assert [chunk.chunk_index for chunk in chunks] == list(range(len(chunks)))
     assert {chunk.page_number for chunk in chunks} == {1, 2}
     assert all(isinstance(chunk.embedding, list) for chunk in chunks)
+
+
+def test_ingest_document_stores_doi_and_domain() -> None:
+    db = _FakeDb()
+
+    document = ingest_document(
+        db,
+        pdf_path=Path("fake.pdf"),
+        title="T",
+        language="en",
+        model=_FakeEmbeddingModel(),
+        doi="10.1/abc",
+        domain="sleep",
+        extract_pages_fn=_fake_extract_pages,
+    )
+
+    assert document.doi == "10.1/abc"
+    assert document.domain == "sleep"
+
+
+def test_ingest_document_commits_once_so_a_failure_leaves_no_orphan_document() -> None:
+    class _ExplodingModel(_FakeEmbeddingModel):
+        def encode(self, texts: list[str]) -> list[list[float]]:
+            raise RuntimeError("embedding failed")
+
+    db = _FakeDb()
+
+    with pytest.raises(RuntimeError, match="embedding failed"):
+        ingest_document(
+            db,
+            pdf_path=Path("fake.pdf"),
+            title="T",
+            language="en",
+            model=_ExplodingModel(),
+            extract_pages_fn=_fake_extract_pages,
+        )
+
+    assert db.commits == 0
+
+
+def test_ingest_document_commits_document_and_chunks_together() -> None:
+    db = _FakeDb()
+
+    ingest_document(
+        db,
+        pdf_path=Path("fake.pdf"),
+        title="T",
+        language="en",
+        model=_FakeEmbeddingModel(),
+        extract_pages_fn=_fake_extract_pages,
+    )
+
+    assert db.commits == 1
 
 
 # --- already_ingested ---

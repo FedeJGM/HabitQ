@@ -107,7 +107,9 @@ def test_parse_result_extracts_metadata_and_open_access_pdf() -> None:
         language="eng",
         license="cc by",
         landing_url="https://europepmc.org/articles/PMC42",
-        pdf_url="https://europepmc.org/articles/PMC42?pdf=render",
+        # The API endpoint, not the browser "?pdf=render" URL: Cloudflare answers
+        # 403 to non-browser clients on the latter (verified live 2026-10-10).
+        pdf_url="https://europepmc.org/api/getPdf?pmcid=PMC42",
     )
 
 
