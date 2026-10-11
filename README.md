@@ -6,7 +6,11 @@ Aplicación móvil de proyecto de grado — orientación personalizada de hábit
 
 Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) (arquitectura y tabla de endpoints), [`docs/requirements/use-cases.md`](./docs/requirements/use-cases.md) (casos de uso) y [`docs/decisions.md`](./docs/decisions.md) (decisiones no explícitas en el plan).
 
-**Backend (FastAPI)** — `POST /auth/google`, `GET /auth/me`, `POST /auth/onboarding-complete`, `POST /auth/refresh`, `POST /auth/logout`, `GET/PUT /profile`, `GET/POST /habits`, `PUT /habits/{id}`. Todos los endpoints privados exigen JWT válido (`get_current_user`).
+**Backend (FastAPI)**
+- **Auth, perfil y hábitos:** `POST /auth/google`, `GET /auth/me`, `POST /auth/onboarding-complete`, `POST /auth/refresh`, `POST /auth/logout`, `GET/PUT /profile`, `GET/POST /habits`, `PUT /habits/{id}`.
+- **Chat:** `POST /chat`, `GET /chat/conversations`, `GET /chat/conversations/{id}/messages`, `DELETE /chat/conversations/{id}`.
+- **Administración:** panel web en `GET /admin` más `POST /admin/discovery`, `GET /admin/candidates`, `POST /admin/candidates/{id}/approve`, `POST /admin/candidates/{id}/reject` y `POST /admin/ingest`.
+- Todos los endpoints privados exigen JWT válido (`get_current_user`). Los de `/admin` además exigen que el correo del usuario esté en `ADMIN_EMAILS` (`require_admin`): 401 sin sesión, 403 si no es admin.
 
 **Mobile (Flutter)**
 - Login con Google + consentimiento inicial (una vez por dispositivo, guardado localmente).
@@ -14,10 +18,12 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 - Home: saludo, cerrar sesión, navegación a Mis Hábitos y Perfil.
 - Mis Hábitos: ver y editar los hábitos ya registrados (autosave).
 - Perfil: ver y editar edad y objetivo principal (autosave).
-- Chat con HabitQ: conversación con IA respaldada por RAG, con fuentes mostradas por cada respuesta y personalización según perfil/hábitos cuando es relevante.
-- Historial: lista de conversaciones pasadas, reabrir para continuar chateando, o borrarlas.
+- Chat con HabitQ: conversación con IA respaldada por RAG, con referencias completas por cada respuesta (autores, año, revista, páginas y enlace DOI tocable) y personalización según perfil/hábitos cuando es relevante.
+- Historial: lista de conversaciones pasadas, reabrir para continuar chateando (cada respuesta conserva sus referencias), o borrarlas.
 
-**RAG completo (Fase 3 del plan)** — ingesta (PDF → texto → limpieza → chunking → embeddings → Postgres), retrieval (similitud coseno en Python, sin pgvector — no está disponible en el entorno de desarrollo, ver `docs/decisions.md` D-12), integración con Gemini (`POST /chat`), y persistencia de conversaciones. Verificado extremo a extremo contra Postgres y la API real de Gemini (ver [`ingestion/README.md`](./ingestion/README.md), [`docs/rag-chat-progress.md`](./docs/rag-chat-progress.md) y `docs/decisions.md` D-12 a D-15).
+**RAG completo (Fase 3 del plan)** — ingesta (PDF → texto → limpieza → chunking → embeddings → Postgres), retrieval (similitud coseno en Python, sin pgvector — no está disponible en el entorno de desarrollo, ver `docs/decisions.md` D-12), integración con Gemini (`POST /chat`), y persistencia de conversaciones. Los embeddings los genera `intfloat/multilingual-e5-small` (configurable con `EMBEDDING_MODEL_NAME`) para que las preguntas en español encuentren documentos en inglés (D-20). Verificado extremo a extremo contra Postgres y la API real de Gemini (ver [`ingestion/README.md`](./ingestion/README.md), [`docs/rag-chat-progress.md`](./docs/rag-chat-progress.md) y `docs/decisions.md` D-12 a D-21).
+
+**Base de conocimiento administrable** — un administrador (correo en `ADMIN_EMAILS`) abre `/admin`, busca 30 artículos de acceso abierto en Europe PMC repartidos entre 7 dominios (sueño, alimentación, actividad física, hidratación, pantallas, estrés y consumo de sustancias), abre cada enlace para leerlo y aprueba o rechaza. Solo los aprobados se descargan, se les extraen los metadatos (autores, año, revista, DOI) y se indexan en segundo plano. Ver [Panel de administración](#7-panel-de-administración-opcional) y `docs/decisions.md` D-17 y D-21.
 
 **Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): hardening de seguridad general.
 
@@ -30,8 +36,8 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 ```text
 habitq/
 ├── mobile/     # Flutter (Persona 1)
-├── backend/    # FastAPI (Persona 2)
-├── ingestion/  # PDFs de fuentes científicas + script de ingesta RAG (ver ingestion/README.md)
+├── backend/    # FastAPI (Persona 2); incluye el panel de administración (app/web/admin.html)
+├── ingestion/  # PDFs de fuentes + scripts: ingest.py (carga por manifest) y reindex.py (tras cambiar de modelo) — ver ingestion/README.md
 ├── Diseño/     # Bocetos de Figma exportados (PNG)
 ├── docs/       # Arquitectura, diagramas, casos de uso, decisiones — ver docs/architecture/overview.md
 ├── .env.example  # Config compartida (ver abajo)
@@ -54,6 +60,10 @@ Completa `.env` con:
 | `JWT_SECRET` | backend | Secreto para firmar el JWT HabitQ (cualquier string largo aleatorio) |
 | `GOOGLE_CLIENT_ID` | backend + mobile | **Web** Client ID de Google Cloud (ver sección "Credenciales de Google" abajo) |
 | `API_BASE_URL` | mobile | URL del backend. `http://10.0.2.2:8000` apunta al `localhost` de tu PC desde el emulador Android |
+| `GEMINI_API_KEY` | backend | API key de Gemini (`google-genai`). **Obligatoria**: el backend no arranca sin ella |
+| `ADMIN_EMAILS` | backend | Correos de Google (separados por coma) con acceso a `/admin`. Vacía = nadie es admin |
+| `EMBEDDING_MODEL_NAME` | backend | Opcional. Modelo de embeddings (por defecto `intfloat/multilingual-e5-small`). Si lo cambias, hay que [reindexar](#4-migraciones) |
+| `RETRIEVAL_MIN_SCORE` | backend | Opcional. Similitud mínima para usar un fragmento como evidencia; vacía = sin umbral (ver D-19) |
 
 ## Backend (FastAPI)
 
@@ -93,12 +103,22 @@ pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r req
 > pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
 > ```
 > Esto desactiva la verificación de certificado solo para esos dos hosts de pip (decisión consciente: Kaspersky ya intercepta ese tráfico de todas formas). Si prefieres no depender de `--trusted-host` cada vez, la alternativa más limpia es excluir `python.exe`/pip de la inspección de conexiones cifradas en la configuración de Kaspersky.
+>
+> El mismo bloqueo aparece al descargar el modelo de embeddings desde Hugging Face (`CERTIFICATE_VERIFY_FAILED` en consultas opcionales). No impide la descarga, que termina tras reintentos, y una vez descargado el backend carga el modelo desde disco sin tocar la red.
 
 ### 4. Migraciones
 
 ```bash
 alembic upgrade head
 ```
+
+Crea las 9 tablas (migraciones `0001`–`0008`).
+
+> **Si ya tenías documentos indexados con una versión anterior** (modelo `all-MiniLM-L6-v2`), reindéxalos después de actualizar. Los vectores de modelos distintos no son comparables: sin este paso el chat **no da error**, pero recupera fragmentos equivocados.
+> ```bash
+> python ../ingestion/scripts/reindex.py --dry-run   # lista lo que se reindexaría, sin cambiar nada
+> python ../ingestion/scripts/reindex.py             # reindexa (un documento por transacción)
+> ```
 
 ### 5. Ejecutar
 
@@ -114,7 +134,31 @@ Verifica: `GET http://localhost:8000/health` → `{"status": "ok"}`.
 pytest
 ```
 
-Los tests no requieren `.env` ni una base de datos real: `tests/conftest.py` define valores de `DATABASE_URL`/`GOOGLE_CLIENT_ID`/`JWT_SECRET`/`GEMINI_API_KEY` dummy para que `Settings` se instancie sin tocar Postgres ni la API real de Gemini. Verificado: 89/89 pasan en limpio.
+Los tests no requieren `.env` ni una base de datos real: `tests/conftest.py` define valores de `DATABASE_URL`/`GOOGLE_CLIENT_ID`/`JWT_SECRET`/`GEMINI_API_KEY` dummy para que `Settings` se instancie sin tocar Postgres ni la API real de Gemini. Verificado: 206 pasan en limpio.
+
+### 7. Panel de administración (opcional)
+
+Sirve para ampliar la base de conocimiento sin tocar archivos a mano.
+
+**Camino rápido**
+
+1. En `.env` define `ADMIN_EMAILS=tu.correo@gmail.com` (la cuenta de Google con la que iniciarás sesión) y **reinicia el backend**: `--reload` vigila archivos `.py`, no el `.env`.
+2. En Google Cloud → *Credenciales* → tu cliente **Web**, agrega `http://localhost` y `http://localhost:8000` en *Orígenes autorizados de JavaScript* (ver [Credenciales de Google](#credenciales-de-google)).
+3. Abre `http://localhost:8000/admin` (no `127.0.0.1`) e inicia sesión con Google.
+4. Elige los dominios → **Buscar 30 documentos** → abre el artículo, el PDF o el DOI de cada candidato → **Aprobar** o **Rechazar** → **Indexar aprobados**.
+5. Pregunta en el chat sobre ese tema: la respuesta trae las referencias.
+
+| Detalle | Comportamiento |
+|---|---|
+| Fuente | Europe PMC: solo acceso abierto, revisiones/metaanálisis/guías desde 2015, en inglés o español |
+| Qué se descarga | Solo lo aprobado. Los rechazados y los ya vistos no se vuelven a proponer |
+| Indexación | En segundo plano; el panel se actualiza solo (Indexando… → Indexado o Falló) |
+| Si el servidor se cae a mitad | El candidato aparece como **Bloqueado** tras 15 min sin avance; **Indexar aprobados** lo reintenta y no duplica el documento (D-21) |
+| PDFs descargados | Quedan en `ingestion/data/scientific_documents/`; no los commitees |
+| Acceso | Sin sesión, 401; con un correo fuera de `ADMIN_EMAILS`, 403 |
+| Sin configurar el origen de Google | El panel acepta un JWT pegado a mano (sección «Alternativa» del login) |
+
+Los documentos institucionales (OMS, CDC) siguen cargándose con `ingestion/scripts/ingest.py` ([`ingestion/README.md`](./ingestion/README.md)).
 
 ## Mobile (Flutter)
 
@@ -128,7 +172,7 @@ Ya instalado en esta máquina (`C:\src\flutter`, Flutter 3.47.2). En una máquin
 
 ### 2. Completar el scaffolding nativo del proyecto
 
-Ya existen `mobile/pubspec.yaml` y `mobile/lib/` (Login, Onboarding, Home, Mis Hábitos, Perfil). Faltan las carpetas nativas (`android/`, `ios/`, etc.) en una máquina nueva, que solo `flutter create` puede generar correctamente:
+Ya existen `mobile/pubspec.yaml` y `mobile/lib/` (Login, Consentimiento, Onboarding, Home, Mis Hábitos, Perfil, Chat e Historial). Faltan las carpetas nativas (`android/`, `ios/`, etc.) en una máquina nueva, que solo `flutter create` puede generar correctamente:
 
 ```bash
 cd mobile
@@ -138,10 +182,10 @@ flutter create --org com.habitq --project-name mobile .
 Esto **no debería sobrescribir** `pubspec.yaml` ni `lib/` existentes (Flutter detecta el proyecto y solo agrega lo que falta). Si `flutter pub get` falla después porque `pubspec.yaml` fue reemplazado, vuelve a agregar las dependencias:
 
 ```bash
-flutter pub add google_sign_in http flutter_secure_storage
+flutter pub add google_sign_in http flutter_secure_storage url_launcher
 ```
 
-Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (83 tests).
+Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (116 tests).
 
 ### 2.1 Build de Android
 
@@ -150,7 +194,7 @@ Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter te
 - **Opción recomendada**: abre Android Studio → *More Actions → SDK Manager → SDK Tools* → marca "NDK (Side by side)" en la versión `28.2.13676358` → Apply. Esto usa el instalador gráfico en vez del `sdkmanager.bat`, que puede fallar con versiones recientes de JDK.
 - Alternativa: instala una versión de NDK ya presente vía Android Studio y fija esa versión explícitamente en `mobile/android/app/build.gradle.kts` (`ndkVersion = "<versión instalada>"`) en vez de `flutter.ndkVersion`.
 
-Ninguna dependencia del proyecto (`google_sign_in`, `flutter_secure_storage`) usa código nativo — el NDK solo lo exige la validación de Android Gradle Plugin, no una necesidad real de esta app.
+Ninguna dependencia del proyecto (`google_sign_in`, `flutter_secure_storage`, `url_launcher`) usa código nativo — el NDK solo lo exige la validación de Android Gradle Plugin, no una necesidad real de esta app.
 
 ### 3. Ejecutar
 
@@ -188,7 +232,7 @@ Copia el valor de `SHA1:` (formato `AA:BB:CC:...`).
 2. **APIs & Services → OAuth consent screen**: tipo "External", completa nombre de la app y correo de soporte. En modo "Testing" agrega tu cuenta de Google (y la de tu compañero(a)) como "Test users".
 3. **APIs & Services → Credentials → Create Credentials → OAuth client ID**:
    - **Tipo "Android"**: Package name `com.habitq.mobile`, SHA-1 obtenido arriba. Esto habilita el Sign-In desde la app, pero **no genera un Client ID que uses en código**.
-   - **Tipo "Web application"**: no necesita URIs de redirect para este flujo. El Client ID generado aquí es el que va en `.env` como `GOOGLE_CLIENT_ID` — el backend lo usa para validar el `aud` del ID token, y Flutter lo pasa como `serverClientId` a `GoogleSignIn` para que el token generado tenga esa audiencia.
+   - **Tipo "Web application"**: no necesita URIs de redirect para este flujo. Para el login del **panel de administración** (navegador) agrega además `http://localhost` y `http://localhost:8000` en *Authorized JavaScript origins* de este mismo cliente (Google pide ambos para pruebas locales; tras guardar, el cambio puede tardar unos minutos en aplicarse). El Client ID generado aquí es el que va en `.env` como `GOOGLE_CLIENT_ID` — el backend lo usa para validar el `aud` del ID token, y Flutter lo pasa como `serverClientId` a `GoogleSignIn` para que el token generado tenga esa audiencia.
 4. Pega el Client ID **Web** (no el de Android) en `GOOGLE_CLIENT_ID` dentro de `.env`.
 
 Repite el registro del Android OAuth client (con su propio SHA-1) en la máquina de tu compañero(a) cuando genere su propio debug keystore — cada máquina de desarrollo tiene un SHA-1 de debug distinto.

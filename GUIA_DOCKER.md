@@ -52,8 +52,9 @@ HabitQ/
 ## 3. Completar las variables de entorno
 
 `docker-compose.yml` lee un archivo `.env` en la **raíz** del repositorio
-(no se commitea, está en `.gitignore`). Ese archivo aún no existe en el
-repo (`.env.example` tampoco), así que hay que crearlo a mano.
+(no se commitea, está en `.gitignore`). El repo trae `.env.example` como
+plantilla, pero no incluye las variables `POSTGRES_*` que usa Docker, así
+que lo más simple es crear el `.env` con el contenido de abajo.
 
 Crear `HabitQ/.env` con este contenido, completando los campos vacíos:
 
@@ -80,6 +81,14 @@ GOOGLE_CLIENT_ID=
 # API key de Gemini (google-genai). Requerida por
 # backend/app/core/config.py — el backend no arranca sin ella.
 GEMINI_API_KEY=
+
+# Correos de Google con acceso al panel /admin, separados por coma.
+# Vacío = nadie es administrador (el chat funciona igual).
+ADMIN_EMAILS=
+
+# Opcionales: ya tienen valor por defecto.
+# EMBEDDING_MODEL_NAME=intfloat/multilingual-e5-small
+# RETRIEVAL_MIN_SCORE=
 
 # --- Mobile (no lo usa Docker, pero conviene dejarlo ya en el .env) ---
 API_BASE_URL=http://10.0.2.2:8000
@@ -134,6 +143,11 @@ Qué hace esto (para que sepas qué esperar en la terminal):
 4. Al arrancar el contenedor del backend, corre `alembic upgrade head`
    (crea las tablas) y después levanta `uvicorn` en el puerto 8000.
 
+> **Puerto 5432:** el compose publica Postgres en el `5432` del host. Si ya
+> tienes un Postgres local en ese puerto, el contenedor `db` no podrá
+> arrancar: cambia `ports` del servicio `db` a `"5433:5432"` (y el puerto de
+> `DATABASE_URL` en el `.env` si vas a correr scripts desde tu máquina).
+
 Para correrlo en segundo plano en vez de bloquear la terminal:
 
 ```bash
@@ -178,29 +192,18 @@ docker compose logs -f backend
 | Abrir una shell en el contenedor del backend | `docker compose exec backend bash` |
 | Conectarse a Postgres desde el host (psql) | `psql -h localhost -U habitq -d habitq` (pide `POSTGRES_PASSWORD` del `.env`) |
 
-### Ingesta de documentos científicos (opcional)
+### Cargar documentos al chat (opcional)
 
-`ingestion/scripts/ingest.py` no es un servicio del `docker-compose`
-(es una tarea puntual, no un proceso de larga duración). Para cargar los
-PDFs de `ingestion/data/scientific_documents/` a la base que corre en
-Docker:
+La base de datos en Docker arranca **vacía** (sin filas en `scientific_documents` ni `document_chunks`). Sin documentos indexados, `POST /chat` sigue respondiendo (Gemini contesta igual) pero **sin referencias**. Para probar el RAG real:
 
-```bash
-docker compose exec backend python ingestion/scripts/ingest.py
-```
+1. Pon tu correo en `ADMIN_EMAILS` del `.env` y recrea el backend: `docker compose up -d`.
+2. Abre `http://localhost:8000/admin` e inicia sesión con Google (el cliente OAuth Web necesita `http://localhost` y `http://localhost:8000` como orígenes de JavaScript autorizados; ver README, sección «Credenciales de Google»).
+3. Busca, aprueba e indexa (README, sección «Panel de administración»).
+4. Haz una pregunta en el chat sobre ese tema: la respuesta trae referencias.
 
-> Esto solo funciona si la carpeta `ingestion/` quedó copiada dentro de la
-> imagen del backend junto con `app/` (verificar con
-> `docker compose exec backend ls ingestion/scripts` si da error de
-> "No such file or directory").
-
-> **Sin este paso, el chat no tiene nada que recuperar.** La base de datos
-> en Docker arranca vacía (sin filas en `scientific_documents` ni
-> `document_chunks`). `POST /chat` va a seguir respondiendo (Gemini
-> contesta igual), pero **sin fuentes citadas** en la respuesta, porque no
-> hay documentos indexados sobre los que buscar. Para probar el
-> comportamiento real del RAG (con fuentes), correr la ingesta antes de
-> probar el chat.
+> **`ingest.py` y `reindex.py` no están dentro del contenedor.** El `docker-compose.yml` construye la imagen con `./backend` como contexto y el `Dockerfile` solo copia ese contenido, así que la carpeta `ingestion/` (hermana de `backend/`) no entra en la imagen: `docker compose exec backend python ingestion/scripts/ingest.py` no encuentra el script. Si necesitas cargar PDFs del manifest, o reindexar, corre los scripts desde tu máquina con el `backend/.venv`; el `.env` de esta guía ya apunta a `localhost:5432`, que es donde Docker publica Postgres.
+>
+> **PDFs del panel:** el contenedor los guarda en una ruta interna que se pierde al reconstruir la imagen. No importa: la metadata y los chunks quedan en Postgres, que es lo que usa el chat.
 
 ---
 
