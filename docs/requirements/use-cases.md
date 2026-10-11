@@ -1,6 +1,6 @@
 # Casos de uso — implementados
 
-Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involucrados. Cubre solo lo construido; para el alcance completo del MVP ver `HABITQ_DEVELOPMENT_PLAN.md`, sección 2.
+Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involucrados. Cubre solo lo construido; para el alcance completo del MVP ver `HABITQ_DEVELOPMENT_PLAN.md`, sección 2. UC-01 a UC-10 son de la persona usuaria; UC-11 a UC-16 son de administración de la base de conocimiento (D-17, D-21).
 
 ## UC-01 — Iniciar sesión con Google
 
@@ -88,10 +88,10 @@ Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involu
 - **Flujo principal:**
   1. El usuario abre "Chat con HabitQ" desde Home.
   2. Escribe una pregunta y la envía (se muestra de inmediato, envío optimista).
-  3. El sistema recupera los fragmentos de evidencia más relevantes de `document_chunks` (similitud coseno, sin pgvector — ver `../decisions.md` D-12), arma un prompt con esa evidencia y, si es relevante, el perfil/hábitos del usuario (D-15), y llama a Gemini.
+  3. El sistema recupera los fragmentos de evidencia más relevantes de `document_chunks` (similitud coseno, sin pgvector — ver `../decisions.md` D-12; embeddings multilingües, D-20), arma un prompt con esa evidencia y, si es relevante, el perfil/hábitos del usuario (D-15), y llama a Gemini.
   4. El sistema guarda la pregunta y la respuesta como mensajes de la conversación (nueva o existente).
-  5. La app muestra la respuesta junto con las fuentes usadas (título, organización).
-- **Postcondición:** Si era la primera pregunta, nueva fila en `conversations`; siempre, 2 filas nuevas en `messages`. Si Gemini falla, no se persiste nada (ni siquiera una conversación vacía — flujo atómico).
+  5. La app muestra la respuesta junto con un bloque «Referencias»: por cada documento usado, autores, año, título, revista, páginas y un enlace DOI tocable (o la URL de origen).
+- **Postcondición:** Si era la primera pregunta, nueva fila en `conversations`; siempre, 2 filas nuevas en `messages`. El mensaje del asistente guarda una copia de sus referencias (`messages.sources`, D-18). Si Gemini falla, no se persiste nada (ni siquiera una conversación vacía — flujo atómico).
 - **Endpoints:** `POST /chat`.
 
 ## UC-09 — Consultar el historial de conversaciones
@@ -101,7 +101,7 @@ Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involu
 - **Flujo principal:**
   1. Desde el Chat, el usuario toca el ícono de historial.
   2. El sistema lista sus conversaciones, más reciente primero.
-  3. El usuario toca una para reabrirla: se precargan sus mensajes y puede seguir chateando en ella (mismo `conversation_id`).
+  3. El usuario toca una para reabrirla: se precargan sus mensajes —cada respuesta con las referencias que tenía— y puede seguir chateando en ella (mismo `conversation_id`).
 - **Postcondición:** Ninguna nueva si solo se consulta; si continúa la conversación, aplica UC-08 sobre la misma conversación.
 - **Endpoints:** `GET /chat/conversations`, `GET /chat/conversations/{id}/messages`.
 
@@ -115,3 +115,74 @@ Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involu
   3. La app quita el ítem de la lista sin recargarla entera.
 - **Postcondición:** La conversación y sus mensajes ya no existen en la base.
 - **Endpoints:** `DELETE /chat/conversations/{id}` (404 si no existe o es de otro usuario, mismo criterio que UC-05/D-03).
+
+---
+
+# Administración de la base de conocimiento
+
+Estos casos los ejecuta una persona administradora (`ADMIN_EMAILS`) desde el panel `/admin`, salvo UC-16 que es de línea de comandos.
+
+## UC-11 — Iniciar sesión en el panel de administración
+
+- **Actor:** Administrador.
+- **Precondición:** Su correo de Google está en `ADMIN_EMAILS` y el cliente OAuth Web tiene `http://localhost` y `http://localhost:8000` como orígenes de JavaScript autorizados.
+- **Flujo principal:**
+  1. Abre `http://localhost:8000/admin`.
+  2. Inicia sesión con Google (el panel usa el mismo `POST /auth/google` que la app).
+  3. El panel consulta `GET /admin/candidates`; si el backend responde 200, muestra «Buscar documentos» y «Revisar candidatos».
+- **Postcondición:** JWT guardado en `sessionStorage`. Con un correo que no está en la lista el backend responde 403 y el panel dice «Esta cuenta no es administradora».
+- **Endpoints:** `GET /admin` (público), `POST /auth/google`, `GET /admin/candidates`.
+
+## UC-12 — Buscar documentos candidatos
+
+- **Actor:** Administrador.
+- **Precondición:** UC-11 completado.
+- **Flujo principal:**
+  1. Elige los dominios a cubrir (sueño, alimentación, actividad física, hidratación, pantallas, estrés, consumo de sustancias; los 7 por defecto).
+  2. Pulsa «Buscar 30 documentos».
+  3. El sistema consulta Europe PMC por dominio (solo acceso abierto, revisiones/metaanálisis/guías desde 2015, inglés o español), reparte los 30 cupos entre los dominios elegidos, descarta lo ya visto (por PMCID o DOI, incluidos los rechazados) y guarda el resto como `pending`.
+- **Postcondición:** Una fila en `discovery_runs` y hasta 30 en `document_candidates` (pueden ser menos si hay poca literatura abierta). Si Europe PMC no responde, 502 y no se guarda nada.
+- **Endpoints:** `POST /admin/discovery`.
+
+## UC-13 — Revisar, aprobar o rechazar candidatos
+
+- **Actor:** Administrador.
+- **Precondición:** Hay candidatos `pending` (UC-12).
+- **Flujo principal:**
+  1. Lee el resumen y abre el artículo, el PDF o el DOI de cada candidato.
+  2. Pulsa «Aprobar» o «Rechazar». Puede filtrar la lista por estado.
+- **Postcondición:** El candidato queda `approved` o `rejected` con `reviewed_at`. Un rechazado no se vuelve a proponer; uno aprobado o rechazado puede cambiarse mientras no haya empezado su indexación (después, 409).
+- **Endpoints:** `GET /admin/candidates`, `POST /admin/candidates/{id}/approve`, `POST /admin/candidates/{id}/reject`.
+
+## UC-14 — Indexar los documentos aprobados
+
+- **Actor:** Administrador.
+- **Precondición:** Hay candidatos `approved` (UC-13).
+- **Flujo principal:**
+  1. Pulsa «Indexar aprobados»; el sistema responde de inmediato (202) con cuántos puso en cola.
+  2. En segundo plano, por cada aprobado: descarga el PDF, extrae el texto, lo parte en chunks, calcula los embeddings y guarda todo.
+  3. El panel se actualiza solo: «Indexando…» pasa a «Indexado» o «Falló» (con el motivo).
+- **Postcondición:** Por cada indexado, una fila en `scientific_documents` (con DOI, dominio, URL de origen, autores, año y revista) y sus `document_chunks`. Desde ese momento el chat puede citarlo (UC-08). Un fallo no detiene al resto del lote; aprobar de nuevo un `failed` lo reintenta.
+- **Endpoints:** `POST /admin/ingest`, `GET /admin/candidates`.
+
+## UC-15 — Recuperar una indexación interrumpida
+
+- **Actor:** Administrador.
+- **Precondición:** El servidor se reinició o cayó durante UC-14 y hay candidatos «Bloqueado» (en `ingesting` sin avance desde hace más de 15 minutos).
+- **Flujo principal:**
+  1. Pulsa «Indexar aprobados».
+  2. El sistema devuelve los bloqueados a `approved` y los incluye en el lote.
+  3. Si alguno ya había quedado indexado antes de la caída (mismo DOI), solo se marca `ingested`, sin descargar de nuevo.
+- **Postcondición:** Ningún documento duplicado. La respuesta indica cuántos se recuperaron (`recovered`).
+- **Endpoints:** `POST /admin/ingest`.
+
+## UC-16 — Reindexar tras cambiar el modelo de embeddings
+
+- **Actor:** Operador, por línea de comandos (no hay endpoint).
+- **Precondición:** Cambió `EMBEDDING_MODEL_NAME` o se actualizó desde una versión que usaba otro modelo (`all-MiniLM-L6-v2`).
+- **Flujo principal:**
+  1. Ejecuta `ingestion/scripts/reindex.py --dry-run` para ver qué documentos se tocarán.
+  2. Ejecuta `ingestion/scripts/reindex.py`.
+  3. Por cada documento, reconstruye los chunks desde su PDF (o re-vectoriza el texto guardado si el PDF ya no está), todo en una transacción.
+- **Postcondición:** Todos los chunks tienen vectores del modelo activo. Sin este paso el chat no falla pero recupera fragmentos equivocados, porque compara vectores de modelos distintos. Si un documento falla conserva sus chunks anteriores y el script se puede repetir.
+- **Endpoints:** Ninguno — `ingestion/scripts/reindex.py`.
