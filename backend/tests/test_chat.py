@@ -107,11 +107,11 @@ class _FakeTokenizer:
 class _FakeEmbeddingModel:
     tokenizer = _FakeTokenizer()
 
-    def encode(self, texts: list[str]) -> list[list[float]]:
-        # Deterministic: every text maps to the same vector, so retrieval
+    def encode_query(self, text: str) -> list[float]:
+        # Deterministic: every query maps to the same vector, so retrieval
         # always finds the single seeded chunk as the top match regardless
         # of content — good enough since this test isn't exercising ranking.
-        return [[1.0, 0.0] for _ in texts]
+        return [1.0, 0.0]
 
 
 class _FakeModels:

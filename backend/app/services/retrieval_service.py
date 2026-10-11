@@ -23,7 +23,7 @@ def retrieve_top_chunks(
     if not chunks:
         return []
 
-    query_embedding = model.encode([query])[0]
+    query_embedding = model.encode_query(query)
 
     scored = [(cosine_similarity(query_embedding, chunk.embedding), chunk) for chunk in chunks]
     scored.sort(key=lambda pair: pair[0], reverse=True)

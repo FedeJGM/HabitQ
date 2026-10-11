@@ -19,7 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Pre-descarga el modelo de embeddings en tiempo de build (no en el primer
 # request de chat): evita latencia y dependencia de red saliente la primera
 # vez que alguien usa POST /chat contra el contenedor.
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+ARG EMBEDDING_MODEL_NAME=intfloat/multilingual-e5-small
+RUN python -c "import sys; from sentence_transformers import SentenceTransformer; SentenceTransformer(sys.argv[1])" "$EMBEDDING_MODEL_NAME"
 
 COPY . .
 

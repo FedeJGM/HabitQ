@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     gemini_api_key: str
     # Comma-separated emails allowed to use /admin (D-17). Empty = nobody.
     admin_emails: str = ""
+    # Sentence-transformers model used to embed documents and questions.
+    # Changing it requires reindexing (ingestion/scripts/reindex.py).
+    embedding_model_name: str = "intfloat/multilingual-e5-small"
     # Minimum cosine similarity for a chunk to be used as evidence. None = no
     # floor. Scores depend on the embedding model, so calibrate it per model.
     retrieval_min_score: float | None = None

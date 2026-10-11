@@ -128,35 +128,85 @@ def ingest_document(
     # document without chunks behind.
     db.flush()
 
+    for chunk in build_chunks(document.id, pages, model):
+        db.add(chunk)
+
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+def build_chunks(document_id, pages: list[tuple[int, str]], model) -> list[DocumentChunk]:
     chunk_size, overlap = chunk_budget(model)
-    chunk_index = 0
+
+    def count_tokens(word: str) -> list:
+        # Without the begin/end markers: encoding each word alone would add
+        # them to every word and make a chunk look ~3x bigger than it is.
+        return model.tokenizer.encode(word, add_special_tokens=False)
+
+    chunks: list[DocumentChunk] = []
     for page_number, raw_text in pages:
         text = clean_text(raw_text)
         if not text:
             continue
 
         page_chunks = chunk_text(
-            text,
-            tokenize=model.tokenizer.encode,
-            chunk_size_tokens=chunk_size,
-            overlap_tokens=overlap,
+            text, tokenize=count_tokens, chunk_size_tokens=chunk_size, overlap_tokens=overlap
         )
         if not page_chunks:
             continue
 
         embeddings = embed_chunks(page_chunks, model)
         for content, embedding in zip(page_chunks, embeddings):
-            db.add(
+            chunks.append(
                 DocumentChunk(
-                    document_id=document.id,
+                    document_id=document_id,
                     content=content,
                     page_number=page_number,
-                    chunk_index=chunk_index,
+                    chunk_index=len(chunks),
                     embedding=embedding,
                 )
             )
-            chunk_index += 1
+    return chunks
 
+
+def reindex_document(
+    db: Session,
+    *,
+    document: ScientificDocument,
+    model,
+    extract_pages_fn: Callable[[Path], list[tuple[int, str]]] = extract_pages,
+    pdf_exists_fn: Callable[[Path], bool] = Path.exists,
+) -> int:
+    """Rebuilds a document's chunks and embeddings with `model` (needed after
+    changing the embedding model: vectors from different models aren't
+    comparable). Uses the PDF when it is still on disk, so chunk sizes follow
+    the new model's limit; otherwise re-embeds the stored text. The old chunks
+    are only replaced if the whole new set was built, in a single commit."""
+    old_chunks = sorted(
+        db.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).all(),
+        key=lambda chunk: chunk.chunk_index,
+    )
+
+    pdf_path = Path(document.file_path)
+    if pdf_exists_fn(pdf_path):
+        new_chunks = build_chunks(document.id, extract_pages_fn(pdf_path), model)
+    else:
+        embeddings = embed_chunks([chunk.content for chunk in old_chunks], model) if old_chunks else []
+        new_chunks = [
+            DocumentChunk(
+                document_id=document.id,
+                content=old.content,
+                page_number=old.page_number,
+                chunk_index=old.chunk_index,
+                embedding=embedding,
+            )
+            for old, embedding in zip(old_chunks, embeddings)
+        ]
+
+    for chunk in old_chunks:
+        db.delete(chunk)
+    for chunk in new_chunks:
+        db.add(chunk)
     db.commit()
-    db.refresh(document)
-    return document
+    return len(new_chunks)

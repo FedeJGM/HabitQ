@@ -225,3 +225,19 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Por qué el umbral queda desactivado:** los puntajes dependen del modelo y del idioma. Con MiniLM, las preguntas válidas en español puntúan 0.11–0.36 y las absurdas 0.04–0.10, así que ningún valor las separa; el umbral solo tiene sentido después de resolver la recuperación entre idiomas.
 
 **Consecuencias:** los chunks ya indexados conservan su tamaño anterior hasta reindexarlos.
+
+---
+
+## D-20 — Modelo de embeddings multilingüe (`multilingual-e5-small`)
+
+**Contexto:** las preguntas llegan en español y los documentos están en inglés. Medido con la base real, `all-MiniLM-L6-v2` puntuaba 0.11–0.36 con preguntas en español (0.50–0.73 en inglés) y las de sueño recuperaban el documento de actividad física: sus puntajes se confundían con los de preguntas sin sentido (0.04–0.10).
+
+**Decisión (2026-10-10, aprobada por el usuario):** el modelo pasa a ser `intfloat/multilingual-e5-small` (384 dimensiones, 512 tokens), configurable con `EMBEDDING_MODEL_NAME`. Los modelos E5 exigen prefijos: `EmbeddingModel` (`app/services/embedding_service.py`) antepone `query: ` a las preguntas y `passage: ` al texto indexado; el resto del código solo llama `encode` / `encode_query`. El Dockerfile descarga el modelo configurado en el build.
+
+**Reindexado:** los vectores de modelos distintos no son comparables, así que cambiar el modelo obliga a recalcular todo: `ingestion/scripts/reindex.py` reconstruye los chunks de cada documento desde su PDF (o re-vectoriza el texto guardado si el PDF ya no está), un documento por transacción para no perder los chunks viejos si algo falla. Aplicado a la base local: 2 documentos, 39 → 33 chunks.
+
+**Corrección en el camino:** `chunk_text` contaba los tokens palabra por palabra con `tokenizer.encode(palabra)`, lo que suma los marcadores `[CLS]`/`[SEP]` a cada palabra e inflaba el conteo ~2.5x (los chunks salían más cortos de lo previsto). Ahora se cuenta con `add_special_tokens=False`. Esto matiza D-12: el conteo por palabra sigue siendo una aproximación, pero ya no está sesgado.
+
+**Resultado medido (6 preguntas válidas en español, 4 fuera de tema):** las 6 válidas recuperan el documento correcto con puntajes 0.81–0.86; las 4 fuera de tema quedan en 0.72–0.77.
+
+**Umbral de relevancia (D-19) sigue desactivado:** los puntajes de E5 están comprimidos y el margen entre válidas y absurdas es de ~0.04 con solo 2 documentos. Conviene calibrarlo cuando el corpus tenga los ~30 documentos, con unas 20 preguntas etiquetadas.

@@ -25,11 +25,11 @@ class _FakeDb:
 class _FakeEmbeddingModel:
     def __init__(self, query_embedding: list[float]) -> None:
         self._query_embedding = query_embedding
-        self.encoded_texts: list[str] | None = None
+        self.encoded_queries: list[str] = []
 
-    def encode(self, texts: list[str]) -> list[list[float]]:
-        self.encoded_texts = texts
-        return [self._query_embedding]
+    def encode_query(self, text: str) -> list[float]:
+        self.encoded_queries.append(text)
+        return self._query_embedding
 
 
 def _chunk(embedding: list[float], *, document_id=None) -> DocumentChunk:
@@ -72,7 +72,7 @@ def test_retrieve_top_chunks_returns_most_similar_first() -> None:
     result = retrieve_top_chunks(db, query="how much should I sleep?", model=model, top_k=2)
 
     assert result == [best, middle]
-    assert model.encoded_texts == ["how much should I sleep?"]
+    assert model.encoded_queries == ["how much should I sleep?"]
 
 
 def test_retrieve_top_chunks_returns_all_when_fewer_than_top_k() -> None:

@@ -22,8 +22,10 @@ def _word_tokenize(text: str) -> list[str]:
 
 
 class _FakeTokenizer:
-    def encode(self, text: str) -> list[str]:
-        return text.split()
+    def encode(self, text: str, add_special_tokens: bool = True) -> list[str]:
+        # Like a real tokenizer, adds begin/end markers unless told not to.
+        tokens = text.split()
+        return ["<s>", *tokens, "</s>"] if add_special_tokens else tokens
 
 
 class _FakeEmbeddingModel:
@@ -249,6 +251,26 @@ def test_ingest_document_never_makes_chunks_longer_than_the_model_can_embed() ->
     chunks = [obj for obj in db.added if isinstance(obj, DocumentChunk)]
     assert len(chunks) > 1
     assert all(len(chunk.content.split()) <= 8 for chunk in chunks)
+
+
+def test_ingest_document_counts_tokens_without_the_special_markers() -> None:
+    # Counting each word with its own <s>/</s> would triple its weight and
+    # shrink every chunk to a third of what the model can embed.
+    class _SmallModel(_FakeEmbeddingModel):
+        max_seq_length = 10
+
+    db = _FakeDb()
+
+    def long_page(pdf_path: Path) -> list[tuple[int, str]]:
+        return [(1, " ".join(f"w{i}" for i in range(40)))]
+
+    ingest_document(
+        db, pdf_path=Path("fake.pdf"), title="T", language="en",
+        model=_SmallModel(), extract_pages_fn=long_page,
+    )
+
+    chunks = [obj for obj in db.added if isinstance(obj, DocumentChunk)]
+    assert len(chunks[0].content.split()) == 8
 
 
 def test_ingest_document_keeps_the_default_chunk_size_for_models_without_a_limit() -> None:

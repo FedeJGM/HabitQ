@@ -56,14 +56,14 @@ def main() -> None:
         if not entries:
             raise SystemExit(f"No manifest entry found for --only {args.only!r}")
 
-    from sentence_transformers import SentenceTransformer
-
+    from app.core.config import settings
     from app.db.session import SessionLocal
     from app.models.document_chunk import DocumentChunk
+    from app.services.embedding_service import load_embedding_model
     from app.services.ingestion_service import already_ingested, ingest_document
 
-    print("Loading embedding model (all-MiniLM-L6-v2)...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    print(f"Loading embedding model ({settings.embedding_model_name})...")
+    model = load_embedding_model(settings.embedding_model_name)
 
     db = SessionLocal()
     try:
