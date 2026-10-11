@@ -116,6 +116,61 @@ void main() {
       expect(turn.sources.single.sourceUrl, isNull);
     });
 
+    test('parses authors, year, DOI and pages of a source', () async {
+      final fakeClient = _FakeApiClient(response: {
+        'conversation_id': 'c1',
+        'message': {
+          'id': 'm1',
+          'role': 'assistant',
+          'content': 'ok',
+          'created_at': '2026-09-01T00:00:00Z',
+        },
+        'sources': [
+          {
+            'document_id': 'd1',
+            'title': 'Sleep and health',
+            'organization': 'Sleep Journal',
+            'source_url': 'https://europepmc.org/articles/PMC1',
+            'authors': 'Doe J, Roe R.',
+            'year': 2024,
+            'doi': '10.1/abc',
+            'pages': [1, 3],
+          },
+        ],
+      });
+      final service = ChatService(apiClient: fakeClient);
+
+      final source = (await service.sendMessage('q')).sources.single;
+
+      expect(source.authors, 'Doe J, Roe R.');
+      expect(source.year, 2024);
+      expect(source.doi, '10.1/abc');
+      expect(source.pages, [1, 3]);
+    });
+
+    test('tolerates sources from an older backend without the new fields', () async {
+      final fakeClient = _FakeApiClient(response: {
+        'conversation_id': 'c1',
+        'message': {
+          'id': 'm1',
+          'role': 'assistant',
+          'content': 'ok',
+          'created_at': '2026-09-01T00:00:00Z',
+        },
+        'sources': [
+          {'document_id': 'd1', 'title': 'Healthy Sleep', 'organization': 'CDC', 'source_url': null},
+        ],
+      });
+      final service = ChatService(apiClient: fakeClient);
+
+      final source = (await service.sendMessage('q')).sources.single;
+
+      expect(source.authors, isNull);
+      expect(source.year, isNull);
+      expect(source.doi, isNull);
+      expect(source.pages, isEmpty);
+    });
+
     test('propagates ApiException on failure', () async {
       final fakeClient = _FakeApiClient(error: ApiException('No se pudo conectar con el servidor.'));
       final service = ChatService(apiClient: fakeClient);
@@ -181,6 +236,39 @@ void main() {
       expect(messages[0].role, 'user');
       expect(messages[1].role, 'assistant');
       expect(messages[1].content, 'Entre 7 y 9 horas.');
+      expect(messages[0].sources, isEmpty);
+      expect(messages[1].sources, isEmpty);
+    });
+
+    test('parses the stored sources of a message', () async {
+      final fakeClient = _FakeApiClient(listResponse: [
+        {
+          'id': 'm2',
+          'role': 'assistant',
+          'content': 'Entre 7 y 9 horas.',
+          'created_at': '2026-09-01T10:00:05Z',
+          'sources': [
+            {
+              'document_id': 'd1',
+              'title': 'Sleep and health',
+              'organization': 'Sleep Journal',
+              'source_url': null,
+              'authors': 'Doe J.',
+              'year': 2024,
+              'doi': '10.1/abc',
+              'pages': [1, 3],
+            },
+          ],
+        },
+      ]);
+      final service = ChatService(apiClient: fakeClient);
+
+      final messages = await service.fetchMessages('c1');
+
+      expect(messages.single.sources, hasLength(1));
+      expect(messages.single.sources.single.title, 'Sleep and health');
+      expect(messages.single.sources.single.doi, '10.1/abc');
+      expect(messages.single.sources.single.pages, [1, 3]);
     });
 
     test('propagates ApiException on failure', () async {

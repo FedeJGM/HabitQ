@@ -123,9 +123,12 @@ Qué hace esto (para que sepas qué esperar en la terminal):
 3. Construye la imagen del backend (`backend/Dockerfile`):
    - Instala `libgomp1` (lo necesita `torch`, dependencia de
      `sentence-transformers`).
+   - Instala PyTorch en su versión solo CPU (la de GPU arrastra ~2 GB de
+     librerías CUDA que el contenedor no usa).
    - Instala las dependencias de `backend/requirements.txt`.
-   - Descarga el modelo de embeddings `all-MiniLM-L6-v2` en tiempo de
-     build (para que el primer `POST /chat` no tenga que descargarlo).
+   - Descarga el modelo de embeddings (`EMBEDDING_MODEL_NAME`, por defecto
+     `intfloat/multilingual-e5-small`, ~450 MB) en tiempo de build (para que
+     el primer `POST /chat` no tenga que descargarlo).
    - **Este paso necesita internet** y puede tardar varios minutos la
      primera vez (imagen pesada por `torch`/`sentence-transformers`).
 4. Al arrancar el contenedor del backend, corre `alembic upgrade head`

@@ -183,3 +183,75 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Por qué no un loop propio:** usar el mecanismo ya provisto por el SDK evita reimplementar backoff/jitter/clasificación de qué códigos ameritan reintento (una fuente de bugs sutiles), y mantiene `generate_answer`/`build_prompt` sin cambios — el reintento vive enteramente en la configuración del cliente.
 
 **Testing:** un test verifica que `get_gemini_client()` arma el cliente con `retry_options.attempts == 3` y `max_delay == 8.0` (inspeccionando `client._api_client._http_options`, un atributo interno del SDK — aceptado como trade-off, no hay una API pública para leerlo de vuelta). Verificado además con una llamada real exitosa después de configurar el retry.
+
+---
+
+## D-17 — Descubrimiento de documentos con aprobación del administrador
+
+**Contexto:** el corpus del RAG eran 2 PDFs cargados a mano, con `source_url`, `year` y `authors` vacíos, así que las referencias del chat eran pobres. Se quiere ampliarlo bajo demanda, sin que ningún documento entre al índice sin revisión humana.
+
+**Decisión (2026-10-10):** pipeline de dos pasos. (1) `POST /admin/discovery` busca en Europe PMC (solo open access, revisiones/metaanálisis/guías, desde 2015, inglés o español) un total de 30 candidatos repartidos entre 7 dominios (sueño, alimentación, actividad física, hidratación, pantallas, estrés, consumo de sustancias) y los guarda como `pending` en `document_candidates`. (2) El administrador abre cada enlace desde el panel `/admin`, aprueba o rechaza, y solo `POST /admin/ingest` descarga, extrae metadatos e indexa los aprobados (en segundo plano).
+
+**Quién es admin:** lista `ADMIN_EMAILS` en el `.env`, comparada contra el correo del usuario autenticado. Sin columna `role` ni migración (mismo criterio de alcance mínimo que D-08/D-09).
+
+**Detalles que importan:**
+- Los candidatos rechazados o ya vistos no se vuelven a proponer (deduplicación por PMCID y DOI).
+- `consumo de sustancias` existe solo como tema de búsqueda; `HabitDomain` (D-04) y el cuestionario móvil no cambian.
+- El PDF se baja de `https://europepmc.org/api/getPdf?pmcid=...`, **no** de la URL `...?pdf=render` que lista Europe PMC: esa está detrás de Cloudflare y responde 403 a clientes que no son navegador (verificado en vivo; ningún User-Agent lo arregla).
+- `ingest_document` pasó a ser atómico (documento y chunks en un solo commit): un fallo al generar embeddings ya no deja un documento huérfano sin chunks.
+
+**Consecuencias:** si el servidor se cae a mitad de una indexación, los candidatos quedaban en `ingesting` sin salida (resuelto en D-21). En Docker, los PDFs descargados quedan en una ruta efímera del contenedor.
+
+---
+
+## D-18 — Referencias del chat guardadas como snapshot en `messages.sources`
+
+**Contexto:** `POST /chat` devolvía las fuentes pero no se guardaban: al reabrir una conversación desde el historial las referencias desaparecían.
+
+**Decisión (2026-10-10):** columna `messages.sources` (JSONB, nullable, migración `0007`) con una copia de las referencias mostradas en cada respuesta del asistente (título, organización, URL, autores, año, DOI y páginas recuperadas). `GET /chat/conversations/{id}/messages` las devuelve; `NULL` se expone como lista vacía.
+
+**Alternativa descartada:** tabla normalizada `message_sources`. Habría obligado a tocar `delete_conversation` (no hay cascada ni `relationship()`) y a unir tablas en cada lectura.
+
+**Consecuencias:** la cita queda tal como se mostró; si luego se corrigen los metadatos de un documento, las respuestas viejas conservan los antiguos. Los mensajes anteriores a `0007` no tienen referencias.
+
+---
+
+## D-19 — Chunks acotados por `max_seq_length` y umbral mínimo de relevancia configurable
+
+**Contexto:** medido con la base real, `all-MiniLM-L6-v2` tiene `max_seq_length = 256` y 24 de 39 chunks lo superaban: el texto sobrante se guardaba y se citaba pero no participaba en la búsqueda (en promedio se perdía el 18% de cada chunk, hasta el 47%).
+
+**Decisión (2026-10-10):** `chunk_budget(model)` limita el tamaño del chunk a `max_seq_length - 2` tokens (con overlap proporcional) cuando el modelo expone ese límite; si no, se mantienen los valores del plan (1000 / 125). Además, `retrieve_top_chunks` acepta `min_score` y la configuración `RETRIEVAL_MIN_SCORE` (vacía = sin umbral) lo aplica en el chat: si ningún chunk lo alcanza, el prompt dice que no hay evidencia y no se muestran referencias.
+
+**Por qué el umbral queda desactivado:** los puntajes dependen del modelo y del idioma. Con MiniLM, las preguntas válidas en español puntúan 0.11–0.36 y las absurdas 0.04–0.10, así que ningún valor las separa; el umbral solo tiene sentido después de resolver la recuperación entre idiomas.
+
+**Consecuencias:** los chunks ya indexados conservan su tamaño anterior hasta reindexarlos.
+
+---
+
+## D-20 — Modelo de embeddings multilingüe (`multilingual-e5-small`)
+
+**Contexto:** las preguntas llegan en español y los documentos están en inglés. Medido con la base real, `all-MiniLM-L6-v2` puntuaba 0.11–0.36 con preguntas en español (0.50–0.73 en inglés) y las de sueño recuperaban el documento de actividad física: sus puntajes se confundían con los de preguntas sin sentido (0.04–0.10).
+
+**Decisión (2026-10-10, aprobada por el usuario):** el modelo pasa a ser `intfloat/multilingual-e5-small` (384 dimensiones, 512 tokens), configurable con `EMBEDDING_MODEL_NAME`. Los modelos E5 exigen prefijos: `EmbeddingModel` (`app/services/embedding_service.py`) antepone `query: ` a las preguntas y `passage: ` al texto indexado; el resto del código solo llama `encode` / `encode_query`. El Dockerfile descarga el modelo configurado en el build.
+
+**Reindexado:** los vectores de modelos distintos no son comparables, así que cambiar el modelo obliga a recalcular todo: `ingestion/scripts/reindex.py` reconstruye los chunks de cada documento desde su PDF (o re-vectoriza el texto guardado si el PDF ya no está), un documento por transacción para no perder los chunks viejos si algo falla. Aplicado a la base local: 2 documentos, 39 → 33 chunks.
+
+**Corrección en el camino:** `chunk_text` contaba los tokens palabra por palabra con `tokenizer.encode(palabra)`, lo que suma los marcadores `[CLS]`/`[SEP]` a cada palabra e inflaba el conteo ~2.5x (los chunks salían más cortos de lo previsto). Ahora se cuenta con `add_special_tokens=False`. Esto matiza D-12: el conteo por palabra sigue siendo una aproximación, pero ya no está sesgado.
+
+**Resultado medido (6 preguntas válidas en español, 4 fuera de tema):** las 6 válidas recuperan el documento correcto con puntajes 0.81–0.86; las 4 fuera de tema quedan en 0.72–0.77.
+
+**Umbral de relevancia (D-19) sigue desactivado:** los puntajes de E5 están comprimidos y el margen entre válidas y absurdas es de ~0.04 con solo 2 documentos. Conviene calibrarlo cuando el corpus tenga los ~30 documentos, con unas 20 preguntas etiquetadas.
+
+---
+
+## D-21 — Recuperación de candidatos bloqueados en `ingesting`
+
+**Contexto:** la indexación corre en un `BackgroundTask` dentro del proceso del servidor. Si el proceso muere (reinicio, caída, cierre del contenedor), los candidatos reclamados quedan en `ingesting`: el estado está bloqueado para la revisión (`_LOCKED_STATUSES`) y `ingest_approved` solo toma `approved`, así que no había forma de reintentarlos desde el panel.
+
+**Decisión (2026-10-10):** `document_candidates.heartbeat_at` (migración `0008`). El lote lo escribe al reclamar y lo refresca después de cada documento para los que siguen en cola (un lote de 30 puede durar más que el umbral); se borra al terminar. Un candidato `ingesting` sin latido en 15 minutos (`STALE_AFTER`), o sin latido alguno (filas anteriores a `0008`), se considera bloqueado (`is_stuck`). `POST /admin/ingest` ejecuta `recover_stuck_candidates` antes de contar: los devuelve a `approved` y entran en el mismo lote. Responde `{"queued", "recovered"}`; `GET /admin/candidates` expone `stuck` y el panel los marca como "Bloqueado" con la instrucción de pulsar "Indexar aprobados".
+
+**Reintento idempotente:** si el servidor muere después de indexar pero antes de guardar el estado, el reintento no debe duplicar el documento. `ingest_candidate` comprueba por DOI si ya existe un `scientific_documents` antes de descargar y, de ser así, solo marca el candidato como `ingested`. Un candidato sin DOI no tiene esa protección (ventana de milisegundos entre dos commits).
+
+**Alternativas descartadas:** (a) resetear todos los `ingesting` al arrancar la app: asume un único proceso y pisaría el trabajo de otro worker; (b) un botón de reintento por candidato: con el umbral de latido, "Indexar aprobados" ya cubre el caso sin otro endpoint.
+
+**Verificado:** en la base real se simuló un candidato dejado en `ingesting` hace una hora: se detectó, se recuperó, se indexó con el modelo real y un segundo reintento no creó un documento duplicado.
