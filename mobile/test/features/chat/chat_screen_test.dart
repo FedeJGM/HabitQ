@@ -117,6 +117,39 @@ void main() {
     expect(find.textContaining('CDC'), findsOneWidget);
   });
 
+  testWidgets('shows a full reference list under the assistant reply', (tester) async {
+    final fakeService = _FakeChatService(responses: [
+      _turn(
+        conversationId: 'c1',
+        content: 'Dormí entre 7 y 9 horas.',
+        sources: const [
+          ChatSource(
+            documentId: 'd1',
+            title: 'Sleep and health',
+            organization: 'Sleep Journal',
+            authors: 'Doe J.',
+            year: 2024,
+            doi: '10.1/abc',
+            pages: [3],
+          ),
+        ],
+      ),
+    ]);
+    await tester.pumpWidget(buildApp(fakeService));
+
+    await tester.enterText(find.byType(TextField), '¿Cuánto debo dormir?');
+    await tester.pump();
+    await tester.tap(_sendButton());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Referencias'), findsOneWidget);
+    expect(
+      find.textContaining('Doe J (2024). Sleep and health. Sleep Journal. https://doi.org/10.1/abc'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('pág. 3'), findsOneWidget);
+  });
+
   testWidgets('clears the input after sending', (tester) async {
     final fakeService = _FakeChatService(responses: [
       _turn(conversationId: 'c1', content: 'Entre 7 y 9 horas.'),

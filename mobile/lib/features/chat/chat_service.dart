@@ -6,6 +6,10 @@ class ChatSource {
     required this.title,
     this.organization,
     this.sourceUrl,
+    this.authors,
+    this.year,
+    this.doi,
+    this.pages = const [],
   });
 
   factory ChatSource.fromJson(Map<String, dynamic> json) => ChatSource(
@@ -13,12 +17,46 @@ class ChatSource {
         title: json['title'] as String,
         organization: json['organization'] as String?,
         sourceUrl: json['source_url'] as String?,
+        authors: json['authors'] as String?,
+        year: json['year'] as int?,
+        doi: json['doi'] as String?,
+        pages: ((json['pages'] as List?) ?? const []).cast<int>(),
       );
 
   final String documentId;
   final String title;
   final String? organization;
   final String? sourceUrl;
+  final String? authors;
+  final int? year;
+  final String? doi;
+  final List<int> pages;
+
+  /// One-line reference: "Authors (Year). Title. Journal. Link · págs. 1, 3".
+  /// Missing pieces are skipped; the link is the DOI when there is one.
+  String get citation {
+    String trimmed(String text) => text.replaceAll(RegExp(r'\.+\s*$'), '');
+
+    final cleanAuthors = authors == null ? null : trimmed(authors!);
+    final head = [
+      if (cleanAuthors != null && cleanAuthors.isNotEmpty) cleanAuthors,
+      if (year != null) '($year)',
+    ].join(' ');
+    final sentences = [
+      if (head.isNotEmpty) head,
+      trimmed(title),
+      if (organization != null) trimmed(organization!),
+    ];
+
+    final link = doi != null ? 'https://doi.org/$doi' : sourceUrl;
+    final extras = [
+      if (link != null) link,
+      if (pages.length == 1) 'pág. ${pages.single}',
+      if (pages.length > 1) 'págs. ${pages.join(', ')}',
+    ];
+
+    return '${sentences.join('. ')}.${extras.isEmpty ? '' : ' ${extras.join(' · ')}'}';
+  }
 }
 
 class ChatMessage {

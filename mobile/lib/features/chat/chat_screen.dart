@@ -161,12 +161,23 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             if (message.sources.isNotEmpty) ...[
               const SizedBox(height: 8),
+              const Text(
+                'Referencias',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               for (final source in message.sources)
-                Text(
-                  source.organization != null
-                      ? '${source.title} — ${source.organization}'
-                      : source.title,
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  // Selectable so the user can copy the DOI/link (no
+                  // url_launcher dependency in the app yet).
+                  child: SelectableText(
+                    source.citation,
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
                 ),
             ],
           ],
