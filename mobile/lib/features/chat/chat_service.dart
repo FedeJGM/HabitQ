@@ -32,8 +32,23 @@ class ChatSource {
   final String? doi;
   final List<int> pages;
 
-  /// One-line reference: "Authors (Year). Title. Journal. Link · págs. 1, 3".
-  /// Missing pieces are skipped; the link is the DOI when there is one.
+  /// Where the reader can open the paper: the DOI link when there is a DOI,
+  /// otherwise the source URL. Null when neither is usable. Only http(s) URLs
+  /// with a host qualify: the values come from third-party metadata and must
+  /// never become a `javascript:` or `file:` link.
+  Uri? get link {
+    final doiValue = doi;
+    if (doiValue != null && doiValue.isNotEmpty) {
+      return Uri.https('doi.org', '/$doiValue');
+    }
+
+    final url = sourceUrl == null ? null : Uri.tryParse(sourceUrl!);
+    if (url == null || url.host.isEmpty) return null;
+    return url.scheme == 'https' || url.scheme == 'http' ? url : null;
+  }
+
+  /// One-line reference without the link: "Authors (Year). Title. Journal. Págs. 1, 3."
+  /// Missing pieces are skipped.
   String get citation {
     String trimmed(String text) => text.replaceAll(RegExp(r'\.+\s*$'), '');
 
@@ -48,14 +63,13 @@ class ChatSource {
       if (organization != null) trimmed(organization!),
     ];
 
-    final link = doi != null ? 'https://doi.org/$doi' : sourceUrl;
-    final extras = [
-      if (link != null) link,
-      if (pages.length == 1) 'pág. ${pages.single}',
-      if (pages.length > 1) 'págs. ${pages.join(', ')}',
-    ];
+    final pagesText = switch (pages.length) {
+      0 => null,
+      1 => 'Pág. ${pages.single}',
+      _ => 'Págs. ${pages.join(', ')}',
+    };
 
-    return '${sentences.join('. ')}.${extras.isEmpty ? '' : ' ${extras.join(' · ')}'}';
+    return '${sentences.join('. ')}.${pagesText == null ? '' : ' $pagesText.'}';
   }
 }
 

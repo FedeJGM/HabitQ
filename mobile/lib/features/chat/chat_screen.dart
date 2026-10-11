@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
@@ -6,6 +7,10 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/habitq_bottom_nav.dart';
 import '../../core/widgets/habitq_shell.dart';
 import 'chat_service.dart';
+
+typedef UrlOpener = Future<bool> Function(Uri uri);
+
+Future<bool> _openInExternalApp(Uri uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
 
 class _DisplayMessage {
   const _DisplayMessage({required this.role, required this.content, this.sources = const []});
@@ -22,10 +27,14 @@ class _DisplayMessage {
 /// conversationId in play is carried forward to subsequent messages, so the
 /// backend keeps them in the same conversation.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key, this.chatService, this.conversationId});
+  const ChatScreen({super.key, this.chatService, this.conversationId, this.urlOpener});
 
   final ChatService? chatService;
   final String? conversationId;
+
+  /// Opens a reference link; defaults to the system browser. Injectable so
+  /// tests never touch the platform.
+  final UrlOpener? urlOpener;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -33,6 +42,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   late final ChatService _chatService;
+  late final UrlOpener _urlOpener;
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   final List<_DisplayMessage> _messages = [];
@@ -46,6 +56,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _chatService = widget.chatService ?? ChatService();
+    _urlOpener = widget.urlOpener ?? _openInExternalApp;
     _controller.addListener(() => setState(() {}));
   }
 
@@ -137,6 +148,52 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
   }
 
+  Future<void> _openLink(Uri uri) async {
+    var opened = false;
+    try {
+      opened = await _urlOpener(uri);
+    } catch (_) {
+      // No app can handle it, or the platform refused: same user-facing result.
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el enlace.')),
+      );
+    }
+  }
+
+  Widget _buildReference(ChatSource source) {
+    final link = source.link;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText(
+            source.citation,
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          if (link != null)
+            InkWell(
+              key: ValueKey('reference-link-${source.documentId}'),
+              onTap: () => _openLink(link),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(
+                  link.toString(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.primary,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBubble(_DisplayMessage message) {
     final isUser = message.role == 'user';
     return Align(
@@ -172,15 +229,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
               for (final source in message.sources)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  // Selectable so the user can copy the DOI/link (no
-                  // url_launcher dependency in the app yet).
-                  child: SelectableText(
-                    source.citation,
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                  ),
-                ),
+                _buildReference(source),
             ],
           ],
         ),

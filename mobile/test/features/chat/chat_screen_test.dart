@@ -74,8 +74,8 @@ Finder _sendButton() => find.ancestor(
     );
 
 void main() {
-  Widget buildApp(ChatService chatService) {
-    return MaterialApp(home: ChatScreen(chatService: chatService));
+  Widget buildApp(ChatService chatService, {UrlOpener? urlOpener}) {
+    return MaterialApp(home: ChatScreen(chatService: chatService, urlOpener: urlOpener));
   }
 
   testWidgets('send button is disabled when the input is empty', (tester) async {
@@ -143,11 +143,85 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Referencias'), findsOneWidget);
-    expect(
-      find.textContaining('Doe J (2024). Sleep and health. Sleep Journal. https://doi.org/10.1/abc'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('pág. 3'), findsOneWidget);
+    expect(find.textContaining('Doe J (2024). Sleep and health. Sleep Journal.'), findsOneWidget);
+    expect(find.textContaining('Pág. 3'), findsOneWidget);
+    expect(find.text('https://doi.org/10.1/abc'), findsOneWidget);
+  });
+
+  group('reference links', () {
+    ChatService serviceWithSource(ChatSource source) => _FakeChatService(responses: [
+          _turn(conversationId: 'c1', content: 'Entre 7 y 9 horas.', sources: [source]),
+        ]);
+
+    Future<void> sendOneMessage(WidgetTester tester) async {
+      await tester.enterText(find.byType(TextField), '¿Cuánto debo dormir?');
+      await tester.pump();
+      await tester.tap(_sendButton());
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('tapping the link opens it in the external app', (tester) async {
+      final opened = <Uri>[];
+      await tester.pumpWidget(buildApp(
+        serviceWithSource(
+          const ChatSource(documentId: 'd1', title: 'Sleep', doi: '10.1/abc'),
+        ),
+        urlOpener: (uri) async {
+          opened.add(uri);
+          return true;
+        },
+      ));
+
+      await sendOneMessage(tester);
+      await tester.tap(find.text('https://doi.org/10.1/abc'));
+      await tester.pumpAndSettle();
+
+      expect(opened, [Uri.parse('https://doi.org/10.1/abc')]);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('tells the user when the link cannot be opened', (tester) async {
+      await tester.pumpWidget(buildApp(
+        serviceWithSource(
+          const ChatSource(documentId: 'd1', title: 'Sleep', doi: '10.1/abc'),
+        ),
+        urlOpener: (uri) async => false,
+      ));
+
+      await sendOneMessage(tester);
+      await tester.tap(find.text('https://doi.org/10.1/abc'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No se pudo abrir el enlace.'), findsOneWidget);
+    });
+
+    testWidgets('tells the user when opening the link throws', (tester) async {
+      await tester.pumpWidget(buildApp(
+        serviceWithSource(
+          const ChatSource(documentId: 'd1', title: 'Sleep', doi: '10.1/abc'),
+        ),
+        urlOpener: (uri) async => throw Exception('no handler'),
+      ));
+
+      await sendOneMessage(tester);
+      await tester.tap(find.text('https://doi.org/10.1/abc'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No se pudo abrir el enlace.'), findsOneWidget);
+    });
+
+    testWidgets('shows no link for a source with an unsafe URL', (tester) async {
+      await tester.pumpWidget(buildApp(
+        serviceWithSource(
+          const ChatSource(documentId: 'd1', title: 'Sleep', sourceUrl: 'javascript:alert(1)'),
+        ),
+      ));
+
+      await sendOneMessage(tester);
+
+      expect(find.textContaining('javascript'), findsNothing);
+      expect(find.byKey(const ValueKey('reference-link-d1')), findsNothing);
+    });
   });
 
   testWidgets('clears the input after sending', (tester) async {
@@ -245,10 +319,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Referencias'), findsOneWidget);
-    expect(
-      find.textContaining('Doe J (2024). Sleep and health. Sleep Journal. https://doi.org/10.1/abc'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Doe J (2024). Sleep and health. Sleep Journal.'), findsOneWidget);
+    expect(find.text('https://doi.org/10.1/abc'), findsOneWidget);
   });
 
   testWidgets('sends the next message under the preloaded conversationId', (tester) async {
