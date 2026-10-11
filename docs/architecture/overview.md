@@ -17,19 +17,22 @@
 └──────────────────┘
 ```
 
-La Fase 3 del plan (RAG) está completa: ingesta (PDF → texto → limpieza → chunking → embeddings → Postgres, `services/ingestion_service.py`), retrieval (similitud coseno en Python — `pgvector` no está disponible en el entorno de desarrollo, embeddings como `ARRAY(FLOAT)`, `docs/decisions.md` D-12), integración con Gemini (`services/llm_service.py`), orquestación y persistencia de conversaciones (`services/chat_service.py`, `POST /chat`), y personalización con perfil/hábitos cuando es relevante (D-15). Ver [`../../ingestion/README.md`](../../ingestion/README.md).
+Servicios externos además de Google Sign-In: **Gemini** (respuestas del chat), **Europe PMC** (búsqueda y PDFs del panel de administración) y **Hugging Face Hub** (descarga única del modelo de embeddings; después se carga desde disco).
+
+La Fase 3 del plan (RAG) está completa: ingesta (PDF → texto → limpieza → chunking → embeddings → Postgres, `services/ingestion_service.py`), retrieval (similitud coseno en Python — `pgvector` no está disponible en el entorno de desarrollo, embeddings como `ARRAY(FLOAT)`, `docs/decisions.md` D-12), integración con Gemini (`services/llm_service.py`), orquestación y persistencia de conversaciones (`services/chat_service.py`, `POST /chat`), y personalización con perfil/hábitos cuando es relevante (D-15). Los embeddings los genera `intfloat/multilingual-e5-small` (`services/embedding_service.py`, D-20). La base de conocimiento se amplía desde un panel de administración ([abajo](#administración-de-la-base-de-conocimiento)). Ver [`../../ingestion/README.md`](../../ingestion/README.md).
 
 ## Backend (`backend/app/`)
 
 Capas, de afuera hacia adentro:
 
-- **`api/routes/`** — un router por recurso (`auth.py`, `profile.py`, `habits.py`), montados en `main.py`.
-- **`api/deps.py`** — dependencias de FastAPI compartidas: `get_db` (sesión SQLAlchemy) y `get_current_user` (decodifica el JWT, carga el `User`, lanza 401 si es inválido/expirado o el usuario no existe).
-- **`services/`** — lógica de negocio por recurso (`auth_service.py`, `profile_service.py`, `habit_record_service.py`, `ingestion_service.py`, `retrieval_service.py`, `llm_service.py`, `chat_service.py`), sin conocimiento de HTTP.
-- **`models/`** — modelos SQLAlchemy (`User`, `Profile`, `HabitRecord`, `ScientificDocument`, `DocumentChunk`, `Conversation`, `Message`).
+- **`api/routes/`** — un router por recurso (`auth.py`, `profile.py`, `habits.py`, `chat.py`, `admin.py`), montados en `main.py`.
+- **`api/deps.py`** — dependencias de FastAPI compartidas: `get_db` (sesión SQLAlchemy), `get_current_user` (decodifica el JWT, carga el `User`, lanza 401 si es inválido/expirado o el usuario no existe), `require_admin` (sobre `get_current_user`: 403 si el correo no está en `ADMIN_EMAILS`) y `get_embedding_model` (carga el modelo una vez y lo reutiliza).
+- **`services/`** — lógica de negocio por recurso sin conocimiento de HTTP. Cuentas y perfil: `auth_service.py`, `google_auth.py`, `profile_service.py`, `habit_record_service.py`. RAG y chat: `embedding_service.py`, `ingestion_service.py`, `retrieval_service.py`, `llm_service.py`, `chat_service.py`. Descubrimiento de documentos: `discovery_service.py` (Europe PMC), `candidate_service.py` (ejecuciones, revisión y recuperación), `download_service.py` (PDF) y `candidate_ingestion_service.py` (orquesta descarga + indexación).
+- **`models/`** — modelos SQLAlchemy (`User`, `Profile`, `HabitRecord`, `ScientificDocument`, `DocumentChunk`, `Conversation`, `Message`, `DiscoveryRun`, `DocumentCandidate`).
 - **`schemas/`** — modelos Pydantic de entrada/salida (validación + serialización).
 - **`core/`** — configuración (`config.py`, lee `.env` de la raíz del repo) y JWT (`security.py`).
 - **`db/`** — engine/sesión (`session.py`) y `Base` declarativa (`base.py`).
+- **`web/`** — `admin.html`, el panel de administración (HTML + JS sin framework, servido por `GET /admin`).
 
 ### Regla de seguridad aplicada consistentemente
 
@@ -50,10 +53,18 @@ Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos o
 | GET | `/habits` | Sí | Lista todos los `habit_records` del usuario |
 | POST | `/habits` | Sí | Crea un nuevo registro de hábito |
 | PUT | `/habits/{habit_id}` | Sí | Actualiza un registro existente propio |
-| POST | `/chat` | Sí | Retrieval + Gemini (con personalización) en una conversación, nueva o existente; persiste ambos mensajes de forma atómica |
+| POST | `/chat` | Sí | Retrieval + Gemini (con personalización) en una conversación, nueva o existente; persiste ambos mensajes de forma atómica. Devuelve `sources` (título, organización, URL, autores, año, DOI y páginas recuperadas) y las guarda con el mensaje del asistente |
 | GET | `/chat/conversations` | Sí | Lista las conversaciones del usuario, más reciente primero |
-| GET | `/chat/conversations/{id}/messages` | Sí | Mensajes de una conversación propia, orden cronológico (404 si no existe o es de otro usuario) |
+| GET | `/chat/conversations/{id}/messages` | Sí | Mensajes de una conversación propia, orden cronológico; cada uno trae sus `sources` (lista vacía si no tiene) (404 si no existe o es de otro usuario) |
 | DELETE | `/chat/conversations/{id}` | Sí | Borra la conversación y sus mensajes (404 si no existe o es de otro usuario) |
+| GET | `/admin` | No | Panel de administración (HTML estático; sus datos pasan por los endpoints protegidos de abajo) |
+| POST | `/admin/discovery` | Admin | Busca 30 candidatos en Europe PMC para los dominios pedidos (los 7 por defecto) y los guarda como `pending` (201); 502 si Europe PMC no responde; 422 si un dominio no existe |
+| GET | `/admin/candidates` | Admin | Lista candidatos; filtros opcionales `?status=` y `?run_id=`. Cada uno trae `stuck` (indexación interrumpida) |
+| POST | `/admin/candidates/{id}/approve` | Admin | Aprueba un candidato (404 si no existe; 409 si ya se está indexando o se indexó) |
+| POST | `/admin/candidates/{id}/reject` | Admin | Rechaza un candidato (mismos 404/409) |
+| POST | `/admin/ingest` | Admin | Devuelve a la cola los candidatos bloqueados y encola en segundo plano la indexación de los aprobados (202 con `{queued, recovered}`) |
+
+**Admin** = JWT válido **y** correo en `ADMIN_EMAILS`: 401 sin sesión, 403 si la cuenta no es administradora.
 
 **Limitación conocida y documentada:** el JWT es *stateless* y no existe tabla de sesiones/blacklist en el modelo de datos del plan. `POST /auth/logout` no puede invalidar un token todavía válido — solo exige que el llamador presente uno. La sesión termina realmente cuando el cliente descarta el token localmente (ver abajo) o cuando expira (24h, configurable en `.env`).
 
@@ -100,7 +111,7 @@ Desde Home: navegación a Mis Hábitos, Perfil y Chat (las tres reales). Desde e
 
 ### Chat (RAG)
 
-`ChatScreen` empieza vacía (nueva conversación) salvo que se abra con un `conversationId` — vía el parámetro del constructor (tests) o el argumento de la ruta `pushNamed` (navegación real desde `ConversationHistoryScreen`) — en cuyo caso precarga los mensajes existentes (`ChatService.fetchMessages`) antes de aceptar el primer mensaje nuevo. El envío es optimista: el mensaje del usuario se muestra antes de esperar la respuesta. El `conversationId` que devuelve `POST /chat` se reutiliza para los mensajes siguientes dentro de la misma sesión de pantalla, así el backend los mantiene en la misma conversación. Cada respuesta del asistente muestra sus fuentes (título + organización) debajo de la burbuja. `ConversationHistoryScreen` lista `GET /chat/conversations`, permite reabrir (navega a `ChatScreen` con el `conversationId`) o borrar (`DELETE`, sin recargar toda la lista).
+`ChatScreen` empieza vacía (nueva conversación) salvo que se abra con un `conversationId` — vía el parámetro del constructor (tests) o el argumento de la ruta `pushNamed` (navegación real desde `ConversationHistoryScreen`) — en cuyo caso precarga los mensajes existentes (`ChatService.fetchMessages`) antes de aceptar el primer mensaje nuevo. El envío es optimista: el mensaje del usuario se muestra antes de esperar la respuesta. El `conversationId` que devuelve `POST /chat` se reutiliza para los mensajes siguientes dentro de la misma sesión de pantalla, así el backend los mantiene en la misma conversación. Cada respuesta del asistente muestra debajo de la burbuja un bloque «Referencias»: una línea por documento (autores, año, título, revista y páginas) con su enlace DOI —o la URL de origen— tocable, que abre el navegador (`url_launcher`); si no se puede abrir, avisa con un `SnackBar`. Solo se aceptan enlaces `http(s)`, porque el valor viene de metadatos de terceros. Al reabrir una conversación desde el historial, cada respuesta conserva sus referencias. `ConversationHistoryScreen` lista `GET /chat/conversations`, permite reabrir (navega a `ChatScreen` con el `conversationId`) o borrar (`DELETE`, sin recargar toda la lista).
 
 ### Refresh proactivo del JWT
 
@@ -112,6 +123,39 @@ Todo widget con lógica async (`OnboardingScreen`, `HabitsScreen`, `ProfileScree
 
 **Excepción deliberada:** código que depende directamente de `FlutterSecureStorage` (`AuthService.signOut()`, `TokenStorage`, `ConsentStorage`) no tiene test unitario que ejercite su cuerpo real. Se comprobó empíricamente que una llamada real a `FlutterSecureStorage` sin mock **cuelga indefinidamente** un `testWidgets()` (no lanza excepción). Estas piezas solo se verifican vía los fakes que las sobreescriben por completo en los tests de las pantallas que las consumen.
 
+## Administración de la base de conocimiento
+
+Pipeline de dos pasos con una persona en el medio (decisiones D-17 y D-21):
+
+```text
+POST /admin/discovery ──▶ Europe PMC ──▶ document_candidates (pending)
+        │
+        ▼  el admin abre cada enlace y decide
+approve / reject ──▶ approved | rejected
+        │
+        ▼
+POST /admin/ingest ──▶ (segundo plano) descarga el PDF ──▶ ingest_document
+        └─ ingesting ──▶ ingested | failed        ──▶ scientific_documents + document_chunks
+```
+
+| Estado | Significado | ¿Se puede aprobar o rechazar? |
+|---|---|---|
+| `pending` | Propuesto, sin revisar | Sí |
+| `approved` | Aprobado, en espera de indexar | Sí |
+| `rejected` | Rechazado; no se vuelve a proponer | Sí |
+| `ingesting` | Lote en curso | No |
+| `ingested` | Indexado | No |
+| `failed` | Falló la descarga o el embedding (motivo en `error`) | Sí: aprobarlo de nuevo lo reintenta |
+
+**Robustez**
+
+- El lote reclama todos los aprobados de una vez (un segundo disparo no los repite) y renueva un *latido* (`heartbeat_at`) tras cada documento.
+- Un candidato en `ingesting` sin latido en 15 minutos se considera bloqueado (`stuck`): `POST /admin/ingest` lo devuelve a `approved` antes de contar.
+- Antes de descargar se comprueba por DOI si el documento ya está indexado, para que un reintento tras una caída no lo duplique.
+- `ingest_document` guarda el documento y sus chunks en un solo commit: un fallo al generar embeddings no deja documentos huérfanos.
+- `download_service` solo descarga por `https`, exige que el archivo empiece con `%PDF` y limita su tamaño a 50 MB. El PDF se pide al endpoint de API de Europe PMC (`/api/getPdf`), porque la URL «de navegador» está detrás de Cloudflare y responde 403 a clientes que no son navegador.
+- El panel muestra títulos y resúmenes de terceros solo con `textContent`, nunca como HTML.
+
 ## Base de datos
 
-7 tablas hoy (migraciones `0001`–`0005`): `users`, `profiles`, `habit_records`, `scientific_documents`, `document_chunks` (con `embedding` como `ARRAY(FLOAT)`, no `Vector` — ver D-12 en `docs/decisions.md`), `conversations`, `messages`. Todo el modelo de datos del plan (sección 8) está implementado. Ver [`../diagrams/er-diagram.md`](../diagrams/er-diagram.md) para el ER completo.
+9 tablas hoy (migraciones `0001`–`0008`): `users`, `profiles`, `habit_records`, `scientific_documents` (con `doi` y `domain`), `document_chunks` (con `embedding` como `ARRAY(FLOAT)`, no `Vector` — ver D-12 en `docs/decisions.md`), `conversations`, `messages` (con `sources` JSONB) y las dos del descubrimiento de documentos: `discovery_runs` y `document_candidates`. Las siete primeras son el modelo de datos del plan (sección 8); las dos últimas son un agregado posterior (D-17). Ver [`../diagrams/er-diagram.md`](../diagrams/er-diagram.md) para el ER completo.

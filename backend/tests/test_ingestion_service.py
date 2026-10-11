@@ -22,8 +22,10 @@ def _word_tokenize(text: str) -> list[str]:
 
 
 class _FakeTokenizer:
-    def encode(self, text: str) -> list[str]:
-        return text.split()
+    def encode(self, text: str, add_special_tokens: bool = True) -> list[str]:
+        # Like a real tokenizer, adds begin/end markers unless told not to.
+        tokens = text.split()
+        return ["<s>", *tokens, "</s>"] if add_special_tokens else tokens
 
 
 class _FakeEmbeddingModel:
@@ -47,12 +49,18 @@ class _FakeQuery:
 class _FakeDb:
     def __init__(self) -> None:
         self.added: list[object] = []
+        self.commits = 0
 
     def add(self, obj: object) -> None:
         self.added.append(obj)
 
+    def flush(self) -> None:
+        for obj in self.added:
+            if getattr(obj, "id", None) is None:
+                obj.id = uuid.uuid4()
+
     def commit(self) -> None:
-        pass
+        self.commits += 1
 
     def refresh(self, obj: object) -> None:
         if getattr(obj, "id", None) is None:
@@ -165,6 +173,118 @@ def test_ingest_document_creates_document_and_chunks() -> None:
     assert [chunk.chunk_index for chunk in chunks] == list(range(len(chunks)))
     assert {chunk.page_number for chunk in chunks} == {1, 2}
     assert all(isinstance(chunk.embedding, list) for chunk in chunks)
+
+
+def test_ingest_document_stores_doi_and_domain() -> None:
+    db = _FakeDb()
+
+    document = ingest_document(
+        db,
+        pdf_path=Path("fake.pdf"),
+        title="T",
+        language="en",
+        model=_FakeEmbeddingModel(),
+        doi="10.1/abc",
+        domain="sleep",
+        extract_pages_fn=_fake_extract_pages,
+    )
+
+    assert document.doi == "10.1/abc"
+    assert document.domain == "sleep"
+
+
+def test_ingest_document_commits_once_so_a_failure_leaves_no_orphan_document() -> None:
+    class _ExplodingModel(_FakeEmbeddingModel):
+        def encode(self, texts: list[str]) -> list[list[float]]:
+            raise RuntimeError("embedding failed")
+
+    db = _FakeDb()
+
+    with pytest.raises(RuntimeError, match="embedding failed"):
+        ingest_document(
+            db,
+            pdf_path=Path("fake.pdf"),
+            title="T",
+            language="en",
+            model=_ExplodingModel(),
+            extract_pages_fn=_fake_extract_pages,
+        )
+
+    assert db.commits == 0
+
+
+def test_ingest_document_commits_document_and_chunks_together() -> None:
+    db = _FakeDb()
+
+    ingest_document(
+        db,
+        pdf_path=Path("fake.pdf"),
+        title="T",
+        language="en",
+        model=_FakeEmbeddingModel(),
+        extract_pages_fn=_fake_extract_pages,
+    )
+
+    assert db.commits == 1
+
+
+def test_ingest_document_never_makes_chunks_longer_than_the_model_can_embed() -> None:
+    # Text past the model's max_seq_length is silently dropped from the
+    # embedding, so a chunk must fit it (minus room for special tokens).
+    class _SmallModel(_FakeEmbeddingModel):
+        max_seq_length = 10
+
+    db = _FakeDb()
+
+    def long_page(pdf_path: Path) -> list[tuple[int, str]]:
+        return [(1, " ".join(f"w{i}" for i in range(40)))]
+
+    ingest_document(
+        db,
+        pdf_path=Path("fake.pdf"),
+        title="T",
+        language="en",
+        model=_SmallModel(),
+        extract_pages_fn=long_page,
+    )
+
+    chunks = [obj for obj in db.added if isinstance(obj, DocumentChunk)]
+    assert len(chunks) > 1
+    assert all(len(chunk.content.split()) <= 8 for chunk in chunks)
+
+
+def test_ingest_document_counts_tokens_without_the_special_markers() -> None:
+    # Counting each word with its own <s>/</s> would triple its weight and
+    # shrink every chunk to a third of what the model can embed.
+    class _SmallModel(_FakeEmbeddingModel):
+        max_seq_length = 10
+
+    db = _FakeDb()
+
+    def long_page(pdf_path: Path) -> list[tuple[int, str]]:
+        return [(1, " ".join(f"w{i}" for i in range(40)))]
+
+    ingest_document(
+        db, pdf_path=Path("fake.pdf"), title="T", language="en",
+        model=_SmallModel(), extract_pages_fn=long_page,
+    )
+
+    chunks = [obj for obj in db.added if isinstance(obj, DocumentChunk)]
+    assert len(chunks[0].content.split()) == 8
+
+
+def test_ingest_document_keeps_the_default_chunk_size_for_models_without_a_limit() -> None:
+    db = _FakeDb()
+
+    def mid_page(pdf_path: Path) -> list[tuple[int, str]]:
+        return [(1, " ".join(f"w{i}" for i in range(300)))]
+
+    ingest_document(
+        db, pdf_path=Path("fake.pdf"), title="T", language="en",
+        model=_FakeEmbeddingModel(), extract_pages_fn=mid_page,
+    )
+
+    assert len([obj for obj in db.added if isinstance(obj, DocumentChunk)]) == 1
 
 
 # --- already_ingested ---

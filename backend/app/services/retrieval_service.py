@@ -14,15 +14,20 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 def retrieve_top_chunks(
-    db: Session, *, query: str, model, top_k: int = 5
+    db: Session, *, query: str, model, top_k: int = 5, min_score: float | None = None
 ) -> list[DocumentChunk]:
+    """Top-k most similar chunks. With `min_score`, chunks scoring below it are
+    dropped even if that leaves fewer than k (or none): weak evidence is worse
+    than saying there is none."""
     chunks = db.query(DocumentChunk).all()
     if not chunks:
         return []
 
-    query_embedding = model.encode([query])[0]
+    query_embedding = model.encode_query(query)
 
     scored = [(cosine_similarity(query_embedding, chunk.embedding), chunk) for chunk in chunks]
     scored.sort(key=lambda pair: pair[0], reverse=True)
+    if min_score is not None:
+        scored = [pair for pair in scored if pair[0] >= min_score]
 
     return [chunk for _, chunk in scored[:top_k]]

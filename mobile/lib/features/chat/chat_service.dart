@@ -6,6 +6,10 @@ class ChatSource {
     required this.title,
     this.organization,
     this.sourceUrl,
+    this.authors,
+    this.year,
+    this.doi,
+    this.pages = const [],
   });
 
   factory ChatSource.fromJson(Map<String, dynamic> json) => ChatSource(
@@ -13,26 +17,84 @@ class ChatSource {
         title: json['title'] as String,
         organization: json['organization'] as String?,
         sourceUrl: json['source_url'] as String?,
+        authors: json['authors'] as String?,
+        year: json['year'] as int?,
+        doi: json['doi'] as String?,
+        pages: ((json['pages'] as List?) ?? const []).cast<int>(),
       );
 
   final String documentId;
   final String title;
   final String? organization;
   final String? sourceUrl;
+  final String? authors;
+  final int? year;
+  final String? doi;
+  final List<int> pages;
+
+  /// Where the reader can open the paper: the DOI link when there is a DOI,
+  /// otherwise the source URL. Null when neither is usable. Only http(s) URLs
+  /// with a host qualify: the values come from third-party metadata and must
+  /// never become a `javascript:` or `file:` link.
+  Uri? get link {
+    final doiValue = doi;
+    if (doiValue != null && doiValue.isNotEmpty) {
+      return Uri.https('doi.org', '/$doiValue');
+    }
+
+    final url = sourceUrl == null ? null : Uri.tryParse(sourceUrl!);
+    if (url == null || url.host.isEmpty) return null;
+    return url.scheme == 'https' || url.scheme == 'http' ? url : null;
+  }
+
+  /// One-line reference without the link: "Authors (Year). Title. Journal. Págs. 1, 3."
+  /// Missing pieces are skipped.
+  String get citation {
+    String trimmed(String text) => text.replaceAll(RegExp(r'\.+\s*$'), '');
+
+    final cleanAuthors = authors == null ? null : trimmed(authors!);
+    final head = [
+      if (cleanAuthors != null && cleanAuthors.isNotEmpty) cleanAuthors,
+      if (year != null) '($year)',
+    ].join(' ');
+    final sentences = [
+      if (head.isNotEmpty) head,
+      trimmed(title),
+      if (organization != null) trimmed(organization!),
+    ];
+
+    final pagesText = switch (pages.length) {
+      0 => null,
+      1 => 'Pág. ${pages.single}',
+      _ => 'Págs. ${pages.join(', ')}',
+    };
+
+    return '${sentences.join('. ')}.${pagesText == null ? '' : ' $pagesText.'}';
+  }
 }
 
 class ChatMessage {
-  const ChatMessage({required this.id, required this.role, required this.content});
+  const ChatMessage({
+    required this.id,
+    required this.role,
+    required this.content,
+    this.sources = const [],
+  });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
         id: json['id'] as String,
         role: json['role'] as String,
         content: json['content'] as String,
+        sources: ((json['sources'] as List?) ?? const [])
+            .cast<Map<String, dynamic>>()
+            .map(ChatSource.fromJson)
+            .toList(),
       );
 
   final String id;
   final String role;
   final String content;
+  final List<ChatSource> sources;
 }
 
 class ConversationSummary {

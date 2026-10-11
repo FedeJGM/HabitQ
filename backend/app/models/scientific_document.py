@@ -20,5 +20,7 @@ class ScientificDocument(Base):
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     language: Mapped[str] = mapped_column(String)
     source_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    doi: Mapped[str | None] = mapped_column(String, nullable=True)
+    domain: Mapped[str | None] = mapped_column(String, nullable=True)
     file_path: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

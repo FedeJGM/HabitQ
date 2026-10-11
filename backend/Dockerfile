@@ -13,13 +13,21 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
+# PyTorch solo CPU. La rueda por defecto de Linux arrastra ~2 GB de librerías
+# NVIDIA/CUDA que este contenedor (sin GPU) nunca usa y que multiplican el
+# tiempo de build. Va en su propio paso y ANTES de requirements.txt: así
+# sentence-transformers encuentra torch ya instalado y, si un paso posterior
+# falla, esta capa queda en caché y no se vuelve a descargar.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Pre-descarga el modelo de embeddings en tiempo de build (no en el primer
 # request de chat): evita latencia y dependencia de red saliente la primera
 # vez que alguien usa POST /chat contra el contenedor.
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+ARG EMBEDDING_MODEL_NAME=intfloat/multilingual-e5-small
+RUN python -c "import sys; from sentence_transformers import SentenceTransformer; SentenceTransformer(sys.argv[1])" "$EMBEDDING_MODEL_NAME"
 
 COPY . .
 
