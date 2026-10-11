@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     gemini_api_key: str
     # Comma-separated emails allowed to use /admin (D-17). Empty = nobody.
     admin_emails: str = ""
+    # Minimum cosine similarity for a chunk to be used as evidence. None = no
+    # floor. Scores depend on the embedding model, so calibrate it per model.
+    retrieval_min_score: float | None = None
 
     model_config = SettingsConfigDict(
         env_file=str(_REPO_ROOT_ENV),

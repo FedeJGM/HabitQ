@@ -226,6 +226,45 @@ def test_ingest_document_commits_document_and_chunks_together() -> None:
     assert db.commits == 1
 
 
+def test_ingest_document_never_makes_chunks_longer_than_the_model_can_embed() -> None:
+    # Text past the model's max_seq_length is silently dropped from the
+    # embedding, so a chunk must fit it (minus room for special tokens).
+    class _SmallModel(_FakeEmbeddingModel):
+        max_seq_length = 10
+
+    db = _FakeDb()
+
+    def long_page(pdf_path: Path) -> list[tuple[int, str]]:
+        return [(1, " ".join(f"w{i}" for i in range(40)))]
+
+    ingest_document(
+        db,
+        pdf_path=Path("fake.pdf"),
+        title="T",
+        language="en",
+        model=_SmallModel(),
+        extract_pages_fn=long_page,
+    )
+
+    chunks = [obj for obj in db.added if isinstance(obj, DocumentChunk)]
+    assert len(chunks) > 1
+    assert all(len(chunk.content.split()) <= 8 for chunk in chunks)
+
+
+def test_ingest_document_keeps_the_default_chunk_size_for_models_without_a_limit() -> None:
+    db = _FakeDb()
+
+    def mid_page(pdf_path: Path) -> list[tuple[int, str]]:
+        return [(1, " ".join(f"w{i}" for i in range(300)))]
+
+    ingest_document(
+        db, pdf_path=Path("fake.pdf"), title="T", language="en",
+        model=_FakeEmbeddingModel(), extract_pages_fn=mid_page,
+    )
+
+    assert len([obj for obj in db.added if isinstance(obj, DocumentChunk)]) == 1
+
+
 # --- already_ingested ---
 
 

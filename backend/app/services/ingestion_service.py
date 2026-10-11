@@ -63,6 +63,23 @@ def chunk_text(
     return chunks
 
 
+_DEFAULT_CHUNK_TOKENS = 1000
+_DEFAULT_OVERLAP_TOKENS = 125
+_SPECIAL_TOKENS = 2  # [CLS]/[SEP]-style markers the model adds around the text
+
+
+def chunk_budget(model) -> tuple[int, int]:
+    """(chunk size, overlap) in tokens. Embedding models silently drop whatever
+    exceeds `max_seq_length`, so a chunk must fit it: otherwise the tail of the
+    chunk is stored and cited but never searchable."""
+    limit = getattr(model, "max_seq_length", None)
+    if not limit:
+        return _DEFAULT_CHUNK_TOKENS, _DEFAULT_OVERLAP_TOKENS
+
+    size = max(1, min(_DEFAULT_CHUNK_TOKENS, limit - _SPECIAL_TOKENS))
+    return size, min(_DEFAULT_OVERLAP_TOKENS, size // 8)
+
+
 def already_ingested(db: Session, file_path: str) -> bool:
     return (
         db.query(ScientificDocument)
@@ -111,13 +128,19 @@ def ingest_document(
     # document without chunks behind.
     db.flush()
 
+    chunk_size, overlap = chunk_budget(model)
     chunk_index = 0
     for page_number, raw_text in pages:
         text = clean_text(raw_text)
         if not text:
             continue
 
-        page_chunks = chunk_text(text, tokenize=model.tokenizer.encode)
+        page_chunks = chunk_text(
+            text,
+            tokenize=model.tokenizer.encode,
+            chunk_size_tokens=chunk_size,
+            overlap_tokens=overlap,
+        )
         if not page_chunks:
             continue
 

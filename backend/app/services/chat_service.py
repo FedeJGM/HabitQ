@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.conversation import Conversation
 from app.models.document_chunk import DocumentChunk
 from app.models.habit_record import HabitRecord
@@ -147,7 +148,13 @@ def send_message(
     gemini_client,
     top_k: int = 5,
 ) -> tuple[Message, list[SourceRef]]:
-    chunks = retrieve_top_chunks(db, query=question, model=embedding_model, top_k=top_k)
+    chunks = retrieve_top_chunks(
+        db,
+        query=question,
+        model=embedding_model,
+        top_k=top_k,
+        min_score=settings.retrieval_min_score,
+    )
     context_chunks = [chunk.content for chunk in chunks]
 
     profile = db.query(Profile).filter(Profile.user_id == conversation.user_id).first()

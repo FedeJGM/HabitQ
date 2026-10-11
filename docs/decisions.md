@@ -183,3 +183,45 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Por qué no un loop propio:** usar el mecanismo ya provisto por el SDK evita reimplementar backoff/jitter/clasificación de qué códigos ameritan reintento (una fuente de bugs sutiles), y mantiene `generate_answer`/`build_prompt` sin cambios — el reintento vive enteramente en la configuración del cliente.
 
 **Testing:** un test verifica que `get_gemini_client()` arma el cliente con `retry_options.attempts == 3` y `max_delay == 8.0` (inspeccionando `client._api_client._http_options`, un atributo interno del SDK — aceptado como trade-off, no hay una API pública para leerlo de vuelta). Verificado además con una llamada real exitosa después de configurar el retry.
+
+---
+
+## D-17 — Descubrimiento de documentos con aprobación del administrador
+
+**Contexto:** el corpus del RAG eran 2 PDFs cargados a mano, con `source_url`, `year` y `authors` vacíos, así que las referencias del chat eran pobres. Se quiere ampliarlo bajo demanda, sin que ningún documento entre al índice sin revisión humana.
+
+**Decisión (2026-10-10):** pipeline de dos pasos. (1) `POST /admin/discovery` busca en Europe PMC (solo open access, revisiones/metaanálisis/guías, desde 2015, inglés o español) un total de 30 candidatos repartidos entre 7 dominios (sueño, alimentación, actividad física, hidratación, pantallas, estrés, consumo de sustancias) y los guarda como `pending` en `document_candidates`. (2) El administrador abre cada enlace desde el panel `/admin`, aprueba o rechaza, y solo `POST /admin/ingest` descarga, extrae metadatos e indexa los aprobados (en segundo plano).
+
+**Quién es admin:** lista `ADMIN_EMAILS` en el `.env`, comparada contra el correo del usuario autenticado. Sin columna `role` ni migración (mismo criterio de alcance mínimo que D-08/D-09).
+
+**Detalles que importan:**
+- Los candidatos rechazados o ya vistos no se vuelven a proponer (deduplicación por PMCID y DOI).
+- `consumo de sustancias` existe solo como tema de búsqueda; `HabitDomain` (D-04) y el cuestionario móvil no cambian.
+- El PDF se baja de `https://europepmc.org/api/getPdf?pmcid=...`, **no** de la URL `...?pdf=render` que lista Europe PMC: esa está detrás de Cloudflare y responde 403 a clientes que no son navegador (verificado en vivo; ningún User-Agent lo arregla).
+- `ingest_document` pasó a ser atómico (documento y chunks en un solo commit): un fallo al generar embeddings ya no deja un documento huérfano sin chunks.
+
+**Consecuencias:** si el servidor se cae a mitad de una indexación, los candidatos quedan en `ingesting` y no se pueden revisar de nuevo (pendiente de resolver). En Docker, los PDFs descargados quedan en una ruta efímera del contenedor.
+
+---
+
+## D-18 — Referencias del chat guardadas como snapshot en `messages.sources`
+
+**Contexto:** `POST /chat` devolvía las fuentes pero no se guardaban: al reabrir una conversación desde el historial las referencias desaparecían.
+
+**Decisión (2026-10-10):** columna `messages.sources` (JSONB, nullable, migración `0007`) con una copia de las referencias mostradas en cada respuesta del asistente (título, organización, URL, autores, año, DOI y páginas recuperadas). `GET /chat/conversations/{id}/messages` las devuelve; `NULL` se expone como lista vacía.
+
+**Alternativa descartada:** tabla normalizada `message_sources`. Habría obligado a tocar `delete_conversation` (no hay cascada ni `relationship()`) y a unir tablas en cada lectura.
+
+**Consecuencias:** la cita queda tal como se mostró; si luego se corrigen los metadatos de un documento, las respuestas viejas conservan los antiguos. Los mensajes anteriores a `0007` no tienen referencias.
+
+---
+
+## D-19 — Chunks acotados por `max_seq_length` y umbral mínimo de relevancia configurable
+
+**Contexto:** medido con la base real, `all-MiniLM-L6-v2` tiene `max_seq_length = 256` y 24 de 39 chunks lo superaban: el texto sobrante se guardaba y se citaba pero no participaba en la búsqueda (en promedio se perdía el 18% de cada chunk, hasta el 47%).
+
+**Decisión (2026-10-10):** `chunk_budget(model)` limita el tamaño del chunk a `max_seq_length - 2` tokens (con overlap proporcional) cuando el modelo expone ese límite; si no, se mantienen los valores del plan (1000 / 125). Además, `retrieve_top_chunks` acepta `min_score` y la configuración `RETRIEVAL_MIN_SCORE` (vacía = sin umbral) lo aplica en el chat: si ningún chunk lo alcanza, el prompt dice que no hay evidencia y no se muestran referencias.
+
+**Por qué el umbral queda desactivado:** los puntajes dependen del modelo y del idioma. Con MiniLM, las preguntas válidas en español puntúan 0.11–0.36 y las absurdas 0.04–0.10, así que ningún valor las separa; el umbral solo tiene sentido después de resolver la recuperación entre idiomas.
+
+**Consecuencias:** los chunks ya indexados conservan su tamaño anterior hasta reindexarlos.

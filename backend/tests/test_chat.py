@@ -254,6 +254,28 @@ def test_send_chat_message_creates_new_conversation() -> None:
     assert body["sources"][0]["title"] == "Healthy Sleep"
 
 
+def test_send_chat_message_ignores_chunks_below_the_configured_min_score(monkeypatch) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "retrieval_min_score", 0.5)
+    gemini = _FakeGeminiClient()
+    far_chunk = DocumentChunk(
+        id=uuid.uuid4(), document_id=_DOCUMENT.id, content="Unrelated text.",
+        page_number=1, chunk_index=0, embedding=[0.0, 1.0],  # orthogonal to the fake query
+    )
+    _override(seed=[_DOCUMENT, far_chunk], gemini_client=gemini)
+    try:
+        response = client.post("/chat", json={"message": "¿Cuánto debo dormir?"})
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 201
+    assert response.json()["sources"] == []
+    prompt = gemini.models.calls[0]["contents"]
+    assert "Unrelated text." not in prompt
+    assert "No hay evidencia disponible" in prompt
+
+
 def test_send_chat_message_persists_the_sources_on_the_assistant_message() -> None:
     fake_db = _override(seed=[_DOCUMENT, _CHUNK])
     try:
