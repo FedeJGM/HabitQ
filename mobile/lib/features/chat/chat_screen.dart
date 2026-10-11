@@ -70,7 +70,9 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() {
         _messages.addAll(
-          messages.map((m) => _DisplayMessage(role: m.role, content: m.content)),
+          messages.map(
+            (m) => _DisplayMessage(role: m.role, content: m.content, sources: m.sources),
+          ),
         );
         _isLoadingHistory = false;
       });

@@ -217,6 +217,40 @@ void main() {
     expect(find.text('Entre 7 y 9 horas.'), findsOneWidget);
   });
 
+  testWidgets('shows the stored references of preloaded assistant messages', (tester) async {
+    final fakeService = _FakeChatService(
+      historyMessages: [
+        const ChatMessage(id: 'm1', role: 'user', content: '¿Cuánto debo dormir?'),
+        const ChatMessage(
+          id: 'm2',
+          role: 'assistant',
+          content: 'Entre 7 y 9 horas.',
+          sources: [
+            ChatSource(
+              documentId: 'd1',
+              title: 'Sleep and health',
+              organization: 'Sleep Journal',
+              authors: 'Doe J.',
+              year: 2024,
+              doi: '10.1/abc',
+              pages: [3],
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: ChatScreen(chatService: fakeService, conversationId: 'c1'),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Referencias'), findsOneWidget);
+    expect(
+      find.textContaining('Doe J (2024). Sleep and health. Sleep Journal. https://doi.org/10.1/abc'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('sends the next message under the preloaded conversationId', (tester) async {
     final fakeService = _FakeChatService(
       historyMessages: [
