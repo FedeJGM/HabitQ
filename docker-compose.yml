@@ -40,6 +40,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
     ports:
       - "8000:8000"
 

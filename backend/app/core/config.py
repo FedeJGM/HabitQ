@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = 60 * 24
     gemini_api_key: str
+    # Comma-separated emails allowed to use /admin (D-17). Empty = nobody.
+    admin_emails: str = ""
 
     model_config = SettingsConfigDict(
         env_file=str(_REPO_ROOT_ENV),
