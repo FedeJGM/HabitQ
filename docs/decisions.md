@@ -126,7 +126,7 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Contexto:** el plan (sección 12) define los límites de chunking en tokens (800-1200, overlap 100-150), pero no especifica cómo contar "tokens" — la opción más simple habría sido aproximar por palabras, o agregar una librería de tokenización nueva (ej. `tiktoken`, pensada para modelos OpenAI).
 
-**Decisión:** `chunk_text` (`backend/app/services/ingestion_service.py`) recibe un `tokenize: Callable[[str], list]` inyectado. En producción, `ingest_document` le pasa `model.tokenizer.encode` — el tokenizer real de `sentence-transformers` (`all-MiniLM-L6-v2`), que ya está disponible sin instalar nada adicional.
+**Decisión:** `chunk_text` (`backend/app/services/ingestion_service.py`) recibe un `tokenize: Callable[[str], list]` inyectado. En producción, `ingest_document` le pasa `model.tokenizer.encode` — el tokenizer real de `sentence-transformers` (`all-MiniLM-L6-v2`), que ya está disponible sin instalar nada adicional. *(Actualización: desde D-20 el modelo activo es `multilingual-e5-small`; el criterio —contar con el tokenizer del modelo en uso— no cambia.)*
 
 **Justificación:** los límites de chunk deben corresponder al tokenizer que realmente va a procesar ese texto al generar el embedding — una aproximación por palabras o un tokenizer de otro modelo (`tiktoken`/OpenAI) puede desviarse significativamente del conteo real, sub- o sobre-llenando chunks respecto al límite de contexto del modelo.
 

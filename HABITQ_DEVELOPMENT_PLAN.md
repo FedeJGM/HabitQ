@@ -90,12 +90,12 @@ Fuentes verificables
 - Google Fit.
 - Apple Health.
 - Wearables.
-- Panel administrativo.
+- Panel administrativo. *(Actualización 2026-10-10: se implementó un panel web mínimo, solo para que un administrador apruebe qué documentos entran a la base de conocimiento; ver `docs/decisions.md` D-17 y D-21.)*
 - Fine-tuning.
 - Entrenamiento de modelos.
 - Microservicios.
 - Kubernetes.
-- Consumo de sustancias.
+- Consumo de sustancias. *(Actualización 2026-10-10: sigue fuera del cuestionario de hábitos y de los dominios de la app; solo existe como tema de búsqueda de documentos para la base de conocimiento, D-17.)*
 - Diagnósticos.
 - Tratamientos.
 - Prescripción de medicamentos.
@@ -609,6 +609,8 @@ Chunk size: 800–1200 tokens
 Overlap: 100–150 tokens
 Top K: 5
 ```
+
+> **Actualización 2026-10-10:** el tamaño efectivo del chunk se limita al `max_seq_length` del modelo de embeddings, porque lo que lo excede no entra en el vector (con `multilingual-e5-small`: 510 tokens de texto, overlap proporcional). Ver `docs/decisions.md` D-19 y D-20. El modelo de embeddings pasó de `all-MiniLM-L6-v2` a `intfloat/multilingual-e5-small` para que las preguntas en español encuentren documentos en inglés.
 
 Estos valores se ajustan mediante pruebas.
 
