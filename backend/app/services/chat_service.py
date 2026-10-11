@@ -1,15 +1,48 @@
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.models.conversation import Conversation
+from app.models.document_chunk import DocumentChunk
 from app.models.habit_record import HabitRecord
 from app.models.message import Message
 from app.models.profile import Profile
 from app.models.scientific_document import ScientificDocument
 from app.services.llm_service import generate_answer
 from app.services.retrieval_service import retrieve_top_chunks
+
+
+@dataclass(frozen=True)
+class SourceRef:
+    document: ScientificDocument
+    pages: list[int]
+
+
+def build_sources(db: Session, chunks: list[DocumentChunk]) -> list[SourceRef]:
+    """One reference per document behind the retrieved chunks, most relevant
+    first (chunks arrive ranked), with the pages those chunks came from."""
+    pages_by_document: dict[uuid.UUID, set[int]] = {}
+    for chunk in chunks:
+        pages = pages_by_document.setdefault(chunk.document_id, set())
+        if chunk.page_number is not None:
+            pages.add(chunk.page_number)
+
+    if not pages_by_document:
+        return []
+
+    documents = (
+        db.query(ScientificDocument)
+        .filter(ScientificDocument.id.in_(list(pages_by_document)))
+        .all()
+    )
+    by_id = {document.id: document for document in documents}
+    return [
+        SourceRef(document=by_id[document_id], pages=sorted(pages))
+        for document_id, pages in pages_by_document.items()
+        if document_id in by_id
+    ]
 
 
 def build_user_context(profile: Profile | None, habits: list[HabitRecord]) -> str | None:
@@ -97,7 +130,7 @@ def send_message(
     embedding_model,
     gemini_client,
     top_k: int = 5,
-) -> tuple[Message, list[ScientificDocument]]:
+) -> tuple[Message, list[SourceRef]]:
     chunks = retrieve_top_chunks(db, query=question, model=embedding_model, top_k=top_k)
     context_chunks = [chunk.content for chunk in chunks]
 
@@ -119,12 +152,7 @@ def send_message(
     assistant_message = Message(conversation_id=conversation.id, role="assistant", content=answer)
     db.add(assistant_message)
 
-    document_ids = {chunk.document_id for chunk in chunks}
-    sources = (
-        db.query(ScientificDocument).filter(ScientificDocument.id.in_(document_ids)).all()
-        if document_ids
-        else []
-    )
+    sources = build_sources(db, chunks)
 
     conversation.updated_at = datetime.now(timezone.utc)
 

@@ -254,6 +254,61 @@ def test_send_chat_message_creates_new_conversation() -> None:
     assert body["sources"][0]["title"] == "Healthy Sleep"
 
 
+def test_send_chat_message_returns_full_references_ordered_by_relevance() -> None:
+    cited = ScientificDocument(
+        id=uuid.uuid4(),
+        title="Sleep and health",
+        authors="Doe J, Roe R.",
+        organization="Sleep Journal",
+        year=2024,
+        doi="10.1/abc",
+        language="en",
+        source_url="https://europepmc.org/articles/PMC1",
+        file_path="pmc1.pdf",
+    )
+    less_relevant = ScientificDocument(
+        id=uuid.uuid4(), title="Other paper", language="en", file_path="other.pdf"
+    )
+
+    def chunk(document: ScientificDocument, page: int | None, embedding: list[float]) -> DocumentChunk:
+        return DocumentChunk(
+            id=uuid.uuid4(), document_id=document.id, content=f"text p{page}",
+            page_number=page, chunk_index=page or 0, embedding=embedding,
+        )
+
+    # The fake query vector is [1, 0]: the cited paper's chunks match, the
+    # other one doesn't. It is seeded first to prove ordering is by relevance.
+    seed = [
+        less_relevant,
+        chunk(less_relevant, 2, [0.0, 1.0]),
+        cited,
+        chunk(cited, 3, [1.0, 0.0]),
+        chunk(cited, 1, [1.0, 0.0]),
+        chunk(cited, None, [1.0, 0.0]),
+    ]
+    _override(seed=seed)
+    try:
+        response = client.post("/chat", json={"message": "¿Cuánto debo dormir?"})
+    finally:
+        _clear_overrides()
+
+    sources = response.json()["sources"]
+    assert [s["title"] for s in sources] == ["Sleep and health", "Other paper"]
+    assert sources[0] == {
+        "document_id": str(cited.id),
+        "title": "Sleep and health",
+        "organization": "Sleep Journal",
+        "source_url": "https://europepmc.org/articles/PMC1",
+        "authors": "Doe J, Roe R.",
+        "year": 2024,
+        "doi": "10.1/abc",
+        "pages": [1, 3],
+    }
+    assert sources[1]["pages"] == [2]
+    assert sources[1]["authors"] is None
+    assert sources[1]["doi"] is None
+
+
 def test_send_chat_message_reuses_existing_conversation() -> None:
     existing = Conversation(id=uuid.uuid4(), user_id=_CURRENT_USER.id, title=None)
     fake_db = _override(seed=[_DOCUMENT, _CHUNK, existing])

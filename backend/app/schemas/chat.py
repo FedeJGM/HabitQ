@@ -14,6 +14,10 @@ class SourceOut(BaseModel):
     title: str
     organization: str | None
     source_url: str | None
+    authors: str | None = None
+    year: int | None = None
+    doi: str | None = None
+    pages: list[int] = []
 
     model_config = {"from_attributes": True}
 

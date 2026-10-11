@@ -53,12 +53,16 @@ def send_chat_message(
         message=MessageOut.model_validate(message),
         sources=[
             SourceOut(
-                document_id=doc.id,
-                title=doc.title,
-                organization=doc.organization,
-                source_url=doc.source_url,
+                document_id=source.document.id,
+                title=source.document.title,
+                organization=source.document.organization,
+                source_url=source.document.source_url,
+                authors=source.document.authors,
+                year=source.document.year,
+                doi=source.document.doi,
+                pages=source.pages,
             )
-            for doc in sources
+            for source in sources
         ],
     )
 
