@@ -79,7 +79,7 @@ def test_other_models_get_no_prefixes() -> None:
 def test_load_embedding_model_builds_the_model_with_the_right_prefixes() -> None:
     requested: list[str] = []
 
-    def factory(name: str) -> _RawModel:
+    def factory(name: str, **kwargs) -> _RawModel:
         requested.append(name)
         return _RawModel()
 
@@ -88,3 +88,42 @@ def test_load_embedding_model_builds_the_model_with_the_right_prefixes() -> None
 
     assert requested == ["intfloat/multilingual-e5-small"]
     assert model._model.encoded == [["query: hola"]]
+
+
+def test_load_embedding_model_prefers_the_local_copy_without_touching_the_network() -> None:
+    # Even with the files cached, a plain load makes HEAD requests to the Hub
+    # to check for updates; on a flaky network that turned into a 500.
+    calls: list[dict] = []
+
+    def factory(name: str, **kwargs) -> _RawModel:
+        calls.append(kwargs)
+        return _RawModel()
+
+    load_embedding_model("intfloat/multilingual-e5-small", factory=factory)
+
+    assert calls == [{"local_files_only": True}]
+
+
+def test_load_embedding_model_downloads_it_when_it_is_not_cached_yet() -> None:
+    calls: list[dict] = []
+
+    def factory(name: str, **kwargs) -> _RawModel:
+        calls.append(kwargs)
+        if kwargs.get("local_files_only"):
+            raise OSError("not in the local cache")
+        return _RawModel()
+
+    model = load_embedding_model("intfloat/multilingual-e5-small", factory=factory)
+
+    assert calls == [{"local_files_only": True}, {}]
+    assert model.max_seq_length == 511  # loaded, prefix applied
+
+
+def test_load_embedding_model_reports_a_failed_download() -> None:
+    def factory(name: str, **kwargs) -> _RawModel:
+        raise OSError("no network")
+
+    import pytest
+
+    with pytest.raises(OSError, match="no network"):
+        load_embedding_model("intfloat/multilingual-e5-small", factory=factory)

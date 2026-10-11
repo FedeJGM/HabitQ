@@ -51,5 +51,14 @@ def load_embedding_model(name: str, *, factory: Callable | None = None) -> Embed
 
         factory = SentenceTransformer
 
+    try:
+        # Already downloaded: load it without touching the network. A normal
+        # load still sends update-check requests to the Hub, and when those
+        # fail (flaky network, TLS-intercepting proxy) the app crashed with a
+        # 500 even though every file was on disk.
+        model = factory(name, local_files_only=True)
+    except OSError:
+        model = factory(name)  # first run on this machine: download it
+
     query_prefix, passage_prefix = prefixes_for(name)
-    return EmbeddingModel(factory(name), query_prefix=query_prefix, passage_prefix=passage_prefix)
+    return EmbeddingModel(model, query_prefix=query_prefix, passage_prefix=passage_prefix)
