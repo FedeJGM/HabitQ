@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,10 @@ from app.services.discovery_service import CandidateData
 
 # Once ingestion has started the admin's decision is final.
 _LOCKED_STATUSES = {"ingesting", "ingested"}
+
+# Indexing one paper takes seconds to a couple of minutes; a batch refreshes
+# its heartbeat after every paper, so this much silence means it died.
+STALE_AFTER = timedelta(minutes=15)
 
 
 class CandidateStateError(Exception):
@@ -84,3 +88,39 @@ def approve_candidate(db: Session, candidate: DocumentCandidate) -> DocumentCand
 
 def reject_candidate(db: Session, candidate: DocumentCandidate) -> DocumentCandidate:
     return _review(db, candidate, "rejected")
+
+
+def is_stuck(
+    candidate: DocumentCandidate,
+    *,
+    now: datetime | None = None,
+    stale_after: timedelta = STALE_AFTER,
+) -> bool:
+    """An `ingesting` candidate whose batch stopped giving signs of life
+    (server restart or crash). No heartbeat at all means a row from before
+    heartbeats existed, which nothing is working on either."""
+    if candidate.status != "ingesting":
+        return False
+    if candidate.heartbeat_at is None:
+        return True
+    return (now or datetime.now(timezone.utc)) - candidate.heartbeat_at > stale_after
+
+
+def recover_stuck_candidates(
+    db: Session,
+    *,
+    now: datetime | None = None,
+    stale_after: timedelta = STALE_AFTER,
+) -> int:
+    """Puts stuck candidates back to `approved` so the next ingestion picks
+    them up again. Returns how many were recovered."""
+    ingesting = db.query(DocumentCandidate).filter(DocumentCandidate.status == "ingesting").all()
+    stuck = [c for c in ingesting if is_stuck(c, now=now, stale_after=stale_after)]
+
+    for candidate in stuck:
+        candidate.status = "approved"
+        candidate.heartbeat_at = None
+
+    if stuck:
+        db.commit()
+    return len(stuck)

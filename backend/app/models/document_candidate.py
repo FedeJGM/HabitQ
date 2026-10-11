@@ -34,3 +34,6 @@ class DocumentCandidate(Base):
     status: Mapped[str] = mapped_column(String, default="pending")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Last sign of life of the batch that is indexing this candidate (only set
+    # while status == "ingesting"). If it goes quiet the server died mid-batch.
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

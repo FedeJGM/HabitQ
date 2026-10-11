@@ -1,7 +1,9 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.models.document_candidate import DocumentCandidate
+from app.models.scientific_document import ScientificDocument
 from app.services.candidate_ingestion_service import ingest_approved, ingest_candidate
 from app.services.download_service import DownloadError
 
@@ -21,6 +23,9 @@ class _FakeQuery:
 
     def all(self) -> list[object]:
         return list(self._items)
+
+    def first(self) -> object | None:
+        return self._items[0] if self._items else None
 
 
 class _FakeDb:
@@ -182,3 +187,84 @@ def test_ingest_approved_counts_failures_and_keeps_going(tmp_path: Path) -> None
 
     assert summary == {"ingested": 1, "failed": 1}
     assert (first.status, second.status) == ("failed", "ingested")
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self._now = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+
+    def __call__(self) -> datetime:
+        self._now += timedelta(minutes=1)
+        return self._now
+
+
+def test_ingest_candidate_stamps_a_heartbeat_while_working_and_clears_it_after(tmp_path: Path) -> None:
+    db, rec = _FakeDb(), _Recorder()
+    candidate = _candidate(status="approved")
+    seen: list[datetime | None] = []
+
+    def spying_download(url: str, dest_dir: Path, name: str) -> Path:
+        seen.append(candidate.heartbeat_at)
+        return dest_dir / f"{name}.pdf"
+
+    ingest_candidate(
+        db, candidate, model="m", pdf_dir=tmp_path,
+        download_fn=spying_download, ingest_fn=rec.ingest, now_fn=_Clock(),
+    )
+
+    assert seen[0] is not None
+    assert candidate.heartbeat_at is None
+
+
+def test_ingest_candidate_clears_the_heartbeat_when_it_fails(tmp_path: Path) -> None:
+    db, rec = _FakeDb(), _Recorder()
+    candidate = _candidate(status="approved")
+
+    def broken_download(url: str, dest_dir: Path, name: str) -> Path:
+        raise DownloadError("boom")
+
+    ingest_candidate(
+        db, candidate, model="m", pdf_dir=tmp_path,
+        download_fn=broken_download, ingest_fn=rec.ingest, now_fn=_Clock(),
+    )
+
+    assert candidate.status == "failed"
+    assert candidate.heartbeat_at is None
+
+
+def test_ingest_approved_refreshes_the_heartbeat_of_candidates_still_in_the_queue(tmp_path: Path) -> None:
+    # A batch can outlast the stuck threshold; candidates waiting their turn
+    # must not look abandoned.
+    first, second = _candidate("PMC1"), _candidate("PMC2")
+    db, rec = _FakeDb([first, second]), _Recorder()
+    second_heartbeat_when_downloading: dict[str, datetime | None] = {}
+
+    def spying_download(url: str, dest_dir: Path, name: str) -> Path:
+        second_heartbeat_when_downloading[name] = second.heartbeat_at
+        return dest_dir / f"{name}.pdf"
+
+    ingest_approved(
+        db, model="m", pdf_dir=tmp_path,
+        download_fn=spying_download, ingest_fn=rec.ingest, now_fn=_Clock(),
+    )
+
+    assert second_heartbeat_when_downloading["PMC2"] > second_heartbeat_when_downloading["PMC1"]
+    assert first.heartbeat_at is None and second.heartbeat_at is None
+
+
+def test_ingest_candidate_does_not_index_a_document_twice(tmp_path: Path) -> None:
+    # The server may have died after indexing but before saving the status.
+    existing = ScientificDocument(
+        id=uuid.uuid4(), title="t", language="en", file_path="old.pdf", doi="10.1/abc"
+    )
+    db, rec = _FakeDb([existing]), _Recorder()
+    candidate = _candidate()
+
+    ingest_candidate(
+        db, candidate, model="m", pdf_dir=tmp_path,
+        download_fn=rec.download, ingest_fn=rec.ingest,
+    )
+
+    assert candidate.status == "ingested"
+    assert rec.downloads == []
+    assert rec.ingest_kwargs == []

@@ -226,11 +226,15 @@ function candidateCard(candidate) {
   return el("div", { class: "candidate" },
     el("h3", { text: candidate.title }),
     el("div", { class: "row" },
-      el("span", { class: "badge " + candidate.status, text: STATUS_LABELS[candidate.status] || candidate.status }),
+      el("span", {
+        class: "badge " + (candidate.stuck ? "failed" : candidate.status),
+        text: candidate.stuck ? "Bloqueado" : (STATUS_LABELS[candidate.status] || candidate.status),
+      }),
       el("span", { class: "muted", text: meta })),
     candidate.abstract ? el("details", {}, el("summary", { class: "muted", text: "Resumen" }), el("p", { text: candidate.abstract })) : null,
     links,
     candidate.error ? el("div", { class: "error", text: "Error: " + candidate.error }) : null,
+    candidate.stuck ? el("div", { class: "error", text: "La indexación se interrumpió (¿se reinició el servidor?). Pulsa «Indexar aprobados» para reintentarla." }) : null,
     el("div", { class: "row", style: "margin-top:8px" },
       el("button", Object.assign({ class: "approve", text: "Aprobar", onclick: () => review(candidate.id, "approve") }, locked ? { disabled: "" } : {})),
       el("button", Object.assign({ class: "reject", text: "Rechazar", onclick: () => review(candidate.id, "reject") }, locked ? { disabled: "" } : {}))));
@@ -260,7 +264,8 @@ async function loadCandidates() {
   renderList(candidates);
 
   clearTimeout(pollTimer);
-  if (candidates.some((c) => c.status === "ingesting")) {
+  // A stuck one is not going to change by itself: don't keep polling for it.
+  if (candidates.some((c) => c.status === "ingesting" && !c.stuck)) {
     pollTimer = setTimeout(() => loadCandidates().catch((e) => say(e.message, true)), 5000);
   }
 }
@@ -291,9 +296,12 @@ async function search() {
 async function ingest() {
   try {
     const result = await api("/admin/ingest", { method: "POST" });
-    say(result.queued === 0
+    const recovered = result.recovered
+      ? " Se reintentan " + result.recovered + " que habían quedado bloqueados."
+      : "";
+    say((result.queued === 0
       ? "No hay documentos aprobados para indexar."
-      : "Indexando " + result.queued + " documento(s) en segundo plano. Puede tardar varios minutos.");
+      : "Indexando " + result.queued + " documento(s) en segundo plano. Puede tardar varios minutos.") + recovered);
     document.getElementById("status-filter").value = "";
     await loadCandidates();
   } catch (error) {

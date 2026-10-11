@@ -19,6 +19,8 @@ from app.services.candidate_service import (
     approve_candidate,
     create_run,
     known_identifiers,
+    is_stuck,
+    recover_stuck_candidates,
     reject_candidate,
 )
 from app.services.discovery_service import DOMAIN_QUERIES, discover_candidates, europe_pmc_fetch
@@ -43,6 +45,12 @@ def run_ingestion_job(embedding_model) -> None:
 
 def get_ingestion_job():
     return run_ingestion_job
+
+
+def _candidate_out(candidate: DocumentCandidate) -> CandidateOut:
+    out = CandidateOut.model_validate(candidate)
+    out.stuck = is_stuck(candidate)
+    return out
 
 
 def _get_candidate_or_404(db: Session, candidate_id: uuid.UUID) -> DocumentCandidate:
@@ -90,7 +98,7 @@ def start_discovery(
         id=run.id,
         domains=domains,
         created_at=run.created_at,
-        candidates=[CandidateOut.model_validate(c) for c in candidates],
+        candidates=[_candidate_out(c) for c in candidates],
     )
 
 
@@ -107,7 +115,7 @@ def list_candidates(
     if status_filter is not None:
         query = query.filter(DocumentCandidate.status == status_filter)
     candidates = query.order_by(DocumentCandidate.domain, DocumentCandidate.title).all()
-    return [CandidateOut.model_validate(c) for c in candidates]
+    return [_candidate_out(c) for c in candidates]
 
 
 @router.post("/candidates/{candidate_id}/approve", response_model=CandidateOut)
@@ -121,7 +129,7 @@ def approve(
         approve_candidate(db, candidate)
     except CandidateStateError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return CandidateOut.model_validate(candidate)
+    return _candidate_out(candidate)
 
 
 @router.post("/candidates/{candidate_id}/reject", response_model=CandidateOut)
@@ -135,7 +143,7 @@ def reject(
         reject_candidate(db, candidate)
     except CandidateStateError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return CandidateOut.model_validate(candidate)
+    return _candidate_out(candidate)
 
 
 @router.post("/ingest", response_model=IngestResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -146,7 +154,9 @@ def ingest(
     embedding_model=Depends(get_embedding_model),
     job=Depends(get_ingestion_job),
 ) -> IngestResponse:
+    # First rescue what an earlier crash left half-done, so it is queued below.
+    recovered = recover_stuck_candidates(db)
     approved = db.query(DocumentCandidate).filter(DocumentCandidate.status == "approved").all()
     if approved:
         background_tasks.add_task(job, embedding_model)
-    return IngestResponse(queued=len(approved))
+    return IngestResponse(queued=len(approved), recovered=recovered)

@@ -40,6 +40,9 @@ class CandidateOut(BaseModel):
     status: str
     error: str | None
     reviewed_at: datetime | None
+    # Indexing was interrupted (server restart/crash): "Indexar aprobados"
+    # puts it back in the queue.
+    stuck: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -53,3 +56,5 @@ class RunOut(BaseModel):
 
 class IngestResponse(BaseModel):
     queued: int
+    # Candidates found stuck in "ingesting" and put back in the queue.
+    recovered: int = 0

@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, String, Text
+from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
 from app.db.base import Base
@@ -60,6 +60,10 @@ def test_document_candidates_table_has_expected_columns() -> None:
     assert table.columns["year"].nullable
 
     assert table.columns["reviewed_at"].nullable
+
+    heartbeat_at = table.columns["heartbeat_at"]
+    assert isinstance(heartbeat_at.type, DateTime)
+    assert heartbeat_at.nullable
 
 
 def test_document_candidates_run_id_is_indexed() -> None:

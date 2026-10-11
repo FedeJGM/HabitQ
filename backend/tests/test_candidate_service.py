@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -10,7 +10,9 @@ from app.services.candidate_service import (
     CandidateStateError,
     approve_candidate,
     create_run,
+    is_stuck,
     known_identifiers,
+    recover_stuck_candidates,
     reject_candidate,
 )
 from app.services.discovery_service import CandidateData
@@ -40,6 +42,11 @@ class _FakeDb:
         class _Q:
             def __init__(self, items):
                 self._items = items
+
+            def filter(self, expr):
+                return _Q(
+                    [i for i in self._items if getattr(i, expr.left.key) == expr.right.value]
+                )
 
             def all(self):
                 return list(self._items)
@@ -153,4 +160,62 @@ def test_review_is_blocked_once_ingestion_started(status: str) -> None:
         reject_candidate(db, candidate)
 
     assert candidate.status == status
+    assert db.commits == 0
+
+
+# --- stuck ingestion recovery ---
+
+_NOW = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+
+
+def _ingesting(minutes_since_heartbeat: int | None) -> DocumentCandidate:
+    candidate = _candidate("ingesting")
+    candidate.heartbeat_at = (
+        None if minutes_since_heartbeat is None else _NOW - timedelta(minutes=minutes_since_heartbeat)
+    )
+    return candidate
+
+
+def test_is_stuck_when_the_last_heartbeat_is_too_old() -> None:
+    assert is_stuck(_ingesting(20), now=_NOW) is True
+
+
+def test_is_not_stuck_with_a_recent_heartbeat() -> None:
+    assert is_stuck(_ingesting(5), now=_NOW) is False
+
+
+def test_ingesting_without_any_heartbeat_counts_as_stuck() -> None:
+    # Rows left over from before heartbeats existed.
+    assert is_stuck(_ingesting(None), now=_NOW) is True
+
+
+@pytest.mark.parametrize("status", ["pending", "approved", "rejected", "ingested", "failed"])
+def test_only_ingesting_candidates_can_be_stuck(status: str) -> None:
+    candidate = _candidate(status)
+    candidate.heartbeat_at = _NOW - timedelta(days=1)
+
+    assert is_stuck(candidate, now=_NOW) is False
+
+
+def test_recover_returns_stuck_candidates_to_approved() -> None:
+    stale, legacy = _ingesting(20), _ingesting(None)
+    db = _FakeDb([stale, legacy])
+
+    recovered = recover_stuck_candidates(db, now=_NOW)
+
+    assert recovered == 2
+    assert (stale.status, legacy.status) == ("approved", "approved")
+    assert stale.heartbeat_at is None and legacy.heartbeat_at is None
+    assert db.commits == 1
+
+
+def test_recover_leaves_alive_and_unrelated_candidates_alone() -> None:
+    alive = _ingesting(5)
+    pending = _candidate("pending")
+    db = _FakeDb([alive, pending])
+
+    recovered = recover_stuck_candidates(db, now=_NOW)
+
+    assert recovered == 0
+    assert alive.status == "ingesting" and pending.status == "pending"
     assert db.commits == 0

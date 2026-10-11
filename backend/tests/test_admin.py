@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import requests
@@ -314,7 +314,7 @@ def test_ingest_queues_a_background_job_for_approved_candidates() -> None:
     response = client.post("/admin/ingest")
 
     assert response.status_code == 202
-    assert response.json() == {"queued": 2}
+    assert response.json() == {"queued": 2, "recovered": 0}
     assert job.models == ["fake-model"]
 
 
@@ -324,7 +324,7 @@ def test_ingest_does_nothing_when_no_candidate_is_approved() -> None:
     response = client.post("/admin/ingest")
 
     assert response.status_code == 202
-    assert response.json() == {"queued": 0}
+    assert response.json() == {"queued": 0, "recovered": 0}
     assert job.models == []
 
 
@@ -348,3 +348,34 @@ def test_panel_never_injects_external_metadata_as_html() -> None:
     response = client.get("/admin")
 
     assert "innerHTML" not in response.text
+
+
+# --- stuck ingestion ---
+
+
+def _ingesting(external_id: str, minutes_ago: int) -> DocumentCandidate:
+    candidate = _candidate(external_id, status="ingesting")
+    candidate.heartbeat_at = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+    return candidate
+
+
+def test_ingest_recovers_candidates_stuck_in_ingesting_and_queues_them() -> None:
+    stuck = _ingesting("PMC1", minutes_ago=60)
+    alive = _ingesting("PMC2", minutes_ago=1)
+    approved = _candidate("PMC3", "approved")
+    _, job = _setup(seed=[stuck, alive, approved])
+
+    response = client.post("/admin/ingest")
+
+    assert response.json() == {"queued": 2, "recovered": 1}
+    assert stuck.status == "approved"
+    assert alive.status == "ingesting"
+    assert job.models == ["fake-model"]
+
+
+def test_list_candidates_flags_the_ones_that_look_stuck() -> None:
+    _setup(seed=[_ingesting("PMC1", minutes_ago=60), _ingesting("PMC2", minutes_ago=1), _candidate("PMC3")])
+
+    body = client.get("/admin/candidates").json()
+
+    assert {c["external_id"]: c["stuck"] for c in body} == {"PMC1": True, "PMC2": False, "PMC3": False}

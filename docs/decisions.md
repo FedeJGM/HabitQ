@@ -200,7 +200,7 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 - El PDF se baja de `https://europepmc.org/api/getPdf?pmcid=...`, **no** de la URL `...?pdf=render` que lista Europe PMC: esa está detrás de Cloudflare y responde 403 a clientes que no son navegador (verificado en vivo; ningún User-Agent lo arregla).
 - `ingest_document` pasó a ser atómico (documento y chunks en un solo commit): un fallo al generar embeddings ya no deja un documento huérfano sin chunks.
 
-**Consecuencias:** si el servidor se cae a mitad de una indexación, los candidatos quedan en `ingesting` y no se pueden revisar de nuevo (pendiente de resolver). En Docker, los PDFs descargados quedan en una ruta efímera del contenedor.
+**Consecuencias:** si el servidor se cae a mitad de una indexación, los candidatos quedaban en `ingesting` sin salida (resuelto en D-21). En Docker, los PDFs descargados quedan en una ruta efímera del contenedor.
 
 ---
 
@@ -241,3 +241,17 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Resultado medido (6 preguntas válidas en español, 4 fuera de tema):** las 6 válidas recuperan el documento correcto con puntajes 0.81–0.86; las 4 fuera de tema quedan en 0.72–0.77.
 
 **Umbral de relevancia (D-19) sigue desactivado:** los puntajes de E5 están comprimidos y el margen entre válidas y absurdas es de ~0.04 con solo 2 documentos. Conviene calibrarlo cuando el corpus tenga los ~30 documentos, con unas 20 preguntas etiquetadas.
+
+---
+
+## D-21 — Recuperación de candidatos bloqueados en `ingesting`
+
+**Contexto:** la indexación corre en un `BackgroundTask` dentro del proceso del servidor. Si el proceso muere (reinicio, caída, cierre del contenedor), los candidatos reclamados quedan en `ingesting`: el estado está bloqueado para la revisión (`_LOCKED_STATUSES`) y `ingest_approved` solo toma `approved`, así que no había forma de reintentarlos desde el panel.
+
+**Decisión (2026-10-10):** `document_candidates.heartbeat_at` (migración `0008`). El lote lo escribe al reclamar y lo refresca después de cada documento para los que siguen en cola (un lote de 30 puede durar más que el umbral); se borra al terminar. Un candidato `ingesting` sin latido en 15 minutos (`STALE_AFTER`), o sin latido alguno (filas anteriores a `0008`), se considera bloqueado (`is_stuck`). `POST /admin/ingest` ejecuta `recover_stuck_candidates` antes de contar: los devuelve a `approved` y entran en el mismo lote. Responde `{"queued", "recovered"}`; `GET /admin/candidates` expone `stuck` y el panel los marca como "Bloqueado" con la instrucción de pulsar "Indexar aprobados".
+
+**Reintento idempotente:** si el servidor muere después de indexar pero antes de guardar el estado, el reintento no debe duplicar el documento. `ingest_candidate` comprueba por DOI si ya existe un `scientific_documents` antes de descargar y, de ser así, solo marca el candidato como `ingested`. Un candidato sin DOI no tiene esa protección (ventana de milisegundos entre dos commits).
+
+**Alternativas descartadas:** (a) resetear todos los `ingesting` al arrancar la app: asume un único proceso y pisaría el trabajo de otro worker; (b) un botón de reintento por candidato: con el umbral de latido, "Indexar aprobados" ya cubre el caso sin otro endpoint.
+
+**Verificado:** en la base real se simuló un candidato dejado en `ingesting` hace una hora: se detectó, se recuperó, se indexó con el modelo real y un segundo reintento no creó un documento duplicado.
