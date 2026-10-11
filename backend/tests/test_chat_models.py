@@ -1,4 +1,5 @@
 from sqlalchemy import DateTime, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
 from app.db.base import Base
@@ -52,6 +53,13 @@ def test_messages_table_has_expected_columns() -> None:
 
     assert isinstance(table.columns["created_at"].type, DateTime)
     assert not table.columns["created_at"].nullable
+
+
+def test_messages_sources_is_a_nullable_json_column() -> None:
+    column = Base.metadata.tables["messages"].columns["sources"]
+
+    assert isinstance(column.type, JSONB)
+    assert column.nullable
 
 
 def test_messages_conversation_id_is_indexed() -> None:

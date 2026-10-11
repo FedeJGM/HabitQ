@@ -45,6 +45,22 @@ def build_sources(db: Session, chunks: list[DocumentChunk]) -> list[SourceRef]:
     ]
 
 
+def source_to_dict(source: SourceRef) -> dict:
+    """JSON-safe form of a reference: what gets stored on the message and what
+    the API returns for it."""
+    document = source.document
+    return {
+        "document_id": str(document.id),
+        "title": document.title,
+        "organization": document.organization,
+        "source_url": document.source_url,
+        "authors": document.authors,
+        "year": document.year,
+        "doi": document.doi,
+        "pages": source.pages,
+    }
+
+
 def build_user_context(profile: Profile | None, habits: list[HabitRecord]) -> str | None:
     if profile is None and not habits:
         return None
@@ -143,16 +159,21 @@ def send_message(
     # added/flushed below, after a successful answer.
     answer = generate_answer(question, context_chunks, gemini_client, user_context=user_context)
 
+    sources = build_sources(db, chunks)
+
     db.add(conversation)
     db.flush()  # assigns conversation.id if it's new, without committing yet
 
     user_message = Message(conversation_id=conversation.id, role="user", content=question)
     db.add(user_message)
 
-    assistant_message = Message(conversation_id=conversation.id, role="assistant", content=answer)
+    assistant_message = Message(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=answer,
+        sources=[source_to_dict(source) for source in sources],
+    )
     db.add(assistant_message)
-
-    sources = build_sources(db, chunks)
 
     conversation.updated_at = datetime.now(timezone.utc)
 

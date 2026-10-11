@@ -14,6 +14,7 @@ from app.services.chat_service import (
     list_conversations,
     list_messages,
     send_message,
+    source_to_dict,
 )
 from app.services.llm_service import get_gemini_client
 
@@ -51,19 +52,7 @@ def send_chat_message(
     return ChatResponse(
         conversation_id=conversation.id,
         message=MessageOut.model_validate(message),
-        sources=[
-            SourceOut(
-                document_id=source.document.id,
-                title=source.document.title,
-                organization=source.document.organization,
-                source_url=source.document.source_url,
-                authors=source.document.authors,
-                year=source.document.year,
-                doi=source.document.doi,
-                pages=source.pages,
-            )
-            for source in sources
-        ],
+        sources=[SourceOut(**source_to_dict(source)) for source in sources],
     )
 
 

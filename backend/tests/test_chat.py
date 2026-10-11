@@ -254,6 +254,29 @@ def test_send_chat_message_creates_new_conversation() -> None:
     assert body["sources"][0]["title"] == "Healthy Sleep"
 
 
+def test_send_chat_message_persists_the_sources_on_the_assistant_message() -> None:
+    fake_db = _override(seed=[_DOCUMENT, _CHUNK])
+    try:
+        client.post("/chat", json={"message": "¿Cuánto debo dormir?"})
+    finally:
+        _clear_overrides()
+
+    user_message, assistant_message = [obj for obj in fake_db.added if isinstance(obj, Message)]
+    assert user_message.sources is None
+    assert assistant_message.sources == [
+        {
+            "document_id": str(_DOCUMENT.id),
+            "title": "Healthy Sleep",
+            "organization": "CDC",
+            "source_url": None,
+            "authors": None,
+            "year": None,
+            "doi": None,
+            "pages": [1],
+        }
+    ]
+
+
 def test_send_chat_message_returns_full_references_ordered_by_relevance() -> None:
     cited = ScientificDocument(
         id=uuid.uuid4(),
@@ -448,6 +471,52 @@ def test_list_conversation_messages_returns_them_in_chronological_order() -> Non
     assert response.status_code == 200
     body = response.json()
     assert [m["id"] for m in body] == [str(first.id), str(second.id)]
+
+
+def test_list_conversation_messages_includes_stored_sources() -> None:
+    conversation = Conversation(id=uuid.uuid4(), user_id=_CURRENT_USER.id, title=None)
+    document_id = uuid.uuid4()
+    messages = [
+        Message(
+            id=uuid.uuid4(), conversation_id=conversation.id, role="user",
+            content="¿Cuánto debo dormir?", sources=None,
+            created_at=datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+        ),
+        Message(
+            id=uuid.uuid4(), conversation_id=conversation.id, role="assistant",
+            content="Entre 7 y 9 horas.",
+            sources=[
+                {
+                    "document_id": str(document_id), "title": "Sleep and health",
+                    "organization": "Sleep Journal", "source_url": None,
+                    "authors": "Doe J.", "year": 2024, "doi": "10.1/abc", "pages": [1, 3],
+                }
+            ],
+            created_at=datetime(2026, 1, 1, 10, 0, 5, tzinfo=timezone.utc),
+        ),
+        # Written before sources were persisted: must still load, with none.
+        Message(
+            id=uuid.uuid4(), conversation_id=conversation.id, role="assistant",
+            content="Respuesta antigua.", sources=None,
+            created_at=datetime(2026, 1, 1, 10, 1, 0, tzinfo=timezone.utc),
+        ),
+    ]
+    _override(seed=[conversation, *messages])
+    try:
+        response = client.get(f"/chat/conversations/{conversation.id}/messages")
+    finally:
+        _clear_overrides()
+
+    body = response.json()
+    assert body[0]["sources"] == []
+    assert body[1]["sources"] == [
+        {
+            "document_id": str(document_id), "title": "Sleep and health",
+            "organization": "Sleep Journal", "source_url": None,
+            "authors": "Doe J.", "year": 2024, "doi": "10.1/abc", "pages": [1, 3],
+        }
+    ]
+    assert body[2]["sources"] == []
 
 
 # --- DELETE /chat/conversations/{id} ---
