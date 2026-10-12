@@ -11,8 +11,9 @@ from app.api.deps import get_db, get_embedding_model, require_admin
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.document_candidate import DocumentCandidate
+from app.models.scientific_document import ScientificDocument
 from app.models.user import User
-from app.schemas.admin import CandidateOut, DiscoveryRequest, IngestResponse, RunOut
+from app.schemas.admin import CandidateOut, DiscoveryRequest, DocumentOut, IngestResponse, RunOut
 from app.services.candidate_ingestion_service import ingest_approved
 from app.services.candidate_service import (
     CandidateStateError,
@@ -24,6 +25,7 @@ from app.services.candidate_service import (
     reject_candidate,
 )
 from app.services.discovery_service import DOMAIN_QUERIES, discover_candidates, europe_pmc_fetch
+from app.services.document_history_service import delete_document, list_ingested_documents
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -58,6 +60,13 @@ def _get_candidate_or_404(db: Session, candidate_id: uuid.UUID) -> DocumentCandi
     if candidate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
     return candidate
+
+
+def _get_document_or_404(db: Session, document_id: uuid.UUID) -> ScientificDocument:
+    document = db.query(ScientificDocument).filter(ScientificDocument.id == document_id).first()
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return document
 
 
 @router.get("", response_class=HTMLResponse)
@@ -116,6 +125,39 @@ def list_candidates(
         query = query.filter(DocumentCandidate.status == status_filter)
     candidates = query.order_by(DocumentCandidate.domain, DocumentCandidate.title).all()
     return [_candidate_out(c) for c in candidates]
+
+
+@router.get("/documents", response_model=list[DocumentOut])
+def list_documents(
+    domain: str | None = None,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> list[DocumentOut]:
+    return [
+        DocumentOut(
+            id=doc.id,
+            title=doc.title,
+            authors=doc.authors,
+            journal=doc.organization,
+            year=doc.year,
+            doi=doc.doi,
+            domain=doc.domain,
+            language=doc.language,
+            source_url=doc.source_url,
+            created_at=doc.created_at,
+            chunk_count=chunks,
+        )
+        for doc, chunks in list_ingested_documents(db, domain)
+    ]
+
+
+@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_document(
+    document_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    delete_document(db, _get_document_or_404(db, document_id))
 
 
 @router.post("/candidates/{candidate_id}/approve", response_model=CandidateOut)
