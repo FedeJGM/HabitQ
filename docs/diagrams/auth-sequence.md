@@ -86,7 +86,7 @@ sequenceDiagram
     B->>B: get_current_user(jwt) → require_admin: ¿email ∈ ADMIN_EMAILS?
     alt es admin
         B-->>P: 200 OK [ ...candidatos ]
-        P->>A: Muestra «1. Buscar documentos» y «2. Revisar candidatos»
+        P->>A: Muestra «1. Buscar documentos», «2. Revisar candidatos» y «3. Historial de documentos»
     else no es admin
         B-->>P: 403 Forbidden
         P->>A: «Esta cuenta no es administradora.» (borra el JWT)

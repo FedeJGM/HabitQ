@@ -62,6 +62,8 @@ Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos o
 | GET | `/admin/candidates` | Admin | Lista candidatos; filtros opcionales `?status=` y `?run_id=`. Cada uno trae `stuck` (indexación interrumpida) |
 | POST | `/admin/candidates/{id}/approve` | Admin | Aprueba un candidato (404 si no existe; 409 si ya se está indexando o se indexó) |
 | POST | `/admin/candidates/{id}/reject` | Admin | Rechaza un candidato (mismos 404/409) |
+| GET | `/admin/documents` | Admin | Lista los documentos indexados (`scientific_documents`, incluidos los cargados por CLI), del más nuevo al más antiguo, con `chunk_count`; filtro opcional `?domain=` |
+| DELETE | `/admin/documents/{id}` | Admin | Elimina el documento y sus chunks en una transacción y marca como `rejected` el candidato `ingested` con el mismo DOI (204; 404 si no existe) |
 | POST | `/admin/ingest` | Admin | Devuelve a la cola los candidatos bloqueados y encola en segundo plano la indexación de los aprobados (202 con `{queued, recovered}`) |
 
 **Admin** = JWT válido **y** correo en `ADMIN_EMAILS`: 401 sin sesión, 403 si la cuenta no es administradora.
@@ -154,6 +156,8 @@ POST /admin/ingest ──▶ (segundo plano) descarga el PDF ──▶ ingest_do
 - Antes de descargar se comprueba por DOI si el documento ya está indexado, para que un reintento tras una caída no lo duplique.
 - `ingest_document` guarda el documento y sus chunks en un solo commit: un fallo al generar embeddings no deja documentos huérfanos.
 - `download_service` solo descarga por `https`, exige que el archivo empiece con `%PDF` y limita su tamaño a 50 MB. El PDF se pide al endpoint de API de Europe PMC (`/api/getPdf`), porque la URL «de navegador» está detrás de Cloudflare y responde 403 a clientes que no son navegador.
+- Historial (D-22): `GET /admin/documents` lista el corpus indexado (`services/document_history_service.py`) y `DELETE /admin/documents/{id}` borra primero los chunks (la FK no tiene `ON DELETE CASCADE`) y luego el documento, en un solo commit. El candidato `ingested` con el mismo DOI (sin distinguir mayúsculas) pasa a `rejected` para que el descubrimiento no lo proponga de nuevo. El PDF no se borra del disco. No hubo migración.
+- Limitación conocida: `messages.sources` no es una FK, así que los mensajes de chat anteriores conservan el texto de la referencia aunque el documento ya no exista (D-18).
 - El panel muestra títulos y resúmenes de terceros solo con `textContent`, nunca como HTML.
 
 ## Base de datos
