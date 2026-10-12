@@ -62,7 +62,7 @@ erDiagram
         text content
         integer page_number
         integer chunk_index
-        "double precision[]" embedding "ARRAY(FLOAT), no pgvector — ver D-12"
+        float[] embedding "ARRAY(FLOAT), no pgvector — ver D-12"
     }
 
     CONVERSATIONS {
