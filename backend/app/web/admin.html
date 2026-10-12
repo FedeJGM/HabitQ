@@ -302,7 +302,23 @@ function documentCard(doc) {
       el("span", { class: "badge", text: DOMAIN_LABELS[doc.domain] || doc.domain || "Sin dominio" }),
       el("span", { class: "muted", text: meta })),
     el("div", { class: "muted", text: "Indexado el " + indexed + " · " + doc.chunk_count + " fragmentos" }),
-    links);
+    links,
+    el("div", { class: "row", style: "margin-top:8px" },
+      el("button", { class: "reject", text: "Eliminar", onclick: () => removeDocument(doc) })));
+}
+
+async function removeDocument(doc) {
+  const question = "¿Eliminar «" + doc.title + "» y sus " + doc.chunk_count + " fragmentos? " +
+    "El chat dejará de usarlo y no se volverá a proponer.";
+  if (!confirm(question)) return;
+  try {
+    await api("/admin/documents/" + doc.id, { method: "DELETE" });
+    await loadDocuments();
+    await loadCandidates();
+    say("Documento eliminado: " + doc.title);
+  } catch (error) {
+    say(error.message, true);
+  }
 }
 
 async function loadDocuments() {
