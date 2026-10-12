@@ -52,6 +52,7 @@ class _FakeQuery:
 class _FakeDb:
     def __init__(self, seed: list[object] | None = None) -> None:
         self.added: list[object] = list(seed or [])
+        self.deleted: list[object] = []
 
     def query(self, model) -> _FakeQuery:
         return _FakeQuery([o for o in self.added if isinstance(o, model)])
@@ -64,6 +65,10 @@ class _FakeDb:
         for obj in self.added:
             if getattr(obj, "id", None) is None:
                 obj.id = uuid.uuid4()
+
+    def delete(self, obj: object) -> None:
+        self.added = [existing for existing in self.added if existing is not obj]
+        self.deleted.append(obj)
 
     def commit(self) -> None:
         self.flush()
@@ -161,6 +166,7 @@ _ADMIN_ENDPOINTS = [
     ("post", f"/admin/candidates/{uuid.uuid4()}/approve"),
     ("post", f"/admin/candidates/{uuid.uuid4()}/reject"),
     ("post", "/admin/ingest"),
+    ("delete", f"/admin/documents/{uuid.uuid4()}"),
 ]
 
 
@@ -431,4 +437,77 @@ def test_panel_has_a_documents_history_section_rendered_with_el() -> None:
 
     assert "3. Historial de documentos" in html
     assert "/admin/documents" in html
+    assert "innerHTML" not in html
+
+
+# --- DELETE /admin/documents/{id} ---
+
+
+def test_delete_document_removes_its_chunks_and_the_document() -> None:
+    doomed, kept = _document("Doomed", 1), _document("Kept", 2)
+    db, _ = _setup(seed=[doomed, kept, _chunk(doomed, 0), _chunk(doomed, 1), _chunk(kept, 0)])
+
+    response = client.delete(f"/admin/documents/{doomed.id}")
+
+    assert response.status_code == 204
+    assert doomed not in db.added
+    assert kept in db.added
+    assert [c.document_id for c in db.query(DocumentChunk).all()] == [kept.id]
+
+
+def test_delete_document_returns_404_for_unknown_document() -> None:
+    _setup()
+
+    response = client.delete(f"/admin/documents/{uuid.uuid4()}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document not found"
+
+
+def test_delete_document_rejects_its_ingested_candidate_so_it_is_not_proposed_again() -> None:
+    doc = _document("Doomed", 1)  # doi "10.1/x"
+    ingested = _candidate("PMC1", status="ingested")
+    ingested.doi = "10.1/X"  # case differs on purpose
+    _setup(seed=[doc, ingested])
+
+    client.delete(f"/admin/documents/{doc.id}")
+
+    assert ingested.status == "rejected"
+    assert ingested.reviewed_at is not None
+
+
+def test_delete_document_leaves_unrelated_candidates_alone() -> None:
+    doc = _document("Doomed", 1)  # doi "10.1/x"
+    other_doi = _candidate("PMC1", status="ingested")
+    other_doi.doi = "10.1/other"
+    not_ingested = _candidate("PMC2", status="approved")
+    not_ingested.doi = "10.1/x"
+    no_doi = _candidate("PMC3", status="ingested")
+    _setup(seed=[doc, other_doi, not_ingested, no_doi])
+
+    client.delete(f"/admin/documents/{doc.id}")
+
+    assert other_doi.status == "ingested"
+    assert not_ingested.status == "approved"
+    assert no_doi.status == "ingested"
+
+
+def test_delete_document_without_doi_does_not_touch_candidates_without_doi() -> None:
+    doc = _document("Doomed", 1)
+    doc.doi = None
+    no_doi = _candidate("PMC1", status="ingested")
+    _setup(seed=[doc, no_doi])
+
+    client.delete(f"/admin/documents/{doc.id}")
+
+    assert no_doi.status == "ingested"
+
+
+def test_panel_wires_the_delete_button_in_the_documents_history() -> None:
+    html = client.get("/admin").text
+
+    assert "Eliminar" in html
+    assert "confirm(" in html
+    assert 'method: "DELETE"' in html
+    assert '"/admin/documents/" + doc.id' in html
     assert "innerHTML" not in html
