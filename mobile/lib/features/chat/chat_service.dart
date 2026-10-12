@@ -141,13 +141,21 @@ class ChatTurn {
 class ChatService {
   ChatService({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
 
+  /// POST /chat runs embedding, DB search and the LLM, so it can take well over
+  /// the default 15s (e.g. the first question after a backend restart).
+  static const chatRequestTimeout = Duration(seconds: 60);
+
   final ApiClient _apiClient;
 
   Future<ChatTurn> sendMessage(String message, {String? conversationId}) async {
-    final response = await _apiClient.post('/chat', {
-      'message': message,
-      if (conversationId != null) 'conversation_id': conversationId,
-    });
+    final response = await _apiClient.post(
+      '/chat',
+      {
+        'message': message,
+        if (conversationId != null) 'conversation_id': conversationId,
+      },
+      timeout: chatRequestTimeout,
+    );
     return ChatTurn.fromJson(response);
   }
 

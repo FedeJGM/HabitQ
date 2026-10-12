@@ -9,12 +9,18 @@ class _FakeApiClient implements ApiClient {
   Map<String, dynamic>? response;
   List<dynamic>? listResponse;
   final List<Map<String, dynamic>> postedBodies = [];
+  final List<Duration> postedTimeouts = [];
   final List<String> getListPaths = [];
   final List<String> deletedPaths = [];
 
   @override
-  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
     postedBodies.add(body);
+    postedTimeouts.add(timeout);
     if (error != null) throw error!;
     return response!;
   }
@@ -61,6 +67,24 @@ void main() {
       await service.sendMessage('¿Cuánto debo dormir?');
 
       expect(fakeClient.postedBodies.single, {'message': '¿Cuánto debo dormir?'});
+    });
+
+    test('posts with a 60-second timeout because the chat reply can be slow', () async {
+      final fakeClient = _FakeApiClient(response: {
+        'conversation_id': 'c1',
+        'message': {
+          'id': 'm1',
+          'role': 'assistant',
+          'content': 'ok',
+          'created_at': '2026-09-01T00:00:00Z',
+        },
+        'sources': [],
+      });
+      final service = ChatService(apiClient: fakeClient);
+
+      await service.sendMessage('q');
+
+      expect(fakeClient.postedTimeouts.single, const Duration(seconds: 60));
     });
 
     test('includes conversationId in the body when given', () async {

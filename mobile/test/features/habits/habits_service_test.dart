@@ -12,7 +12,11 @@ class _FakeApiClient implements ApiClient {
   Map<String, dynamic>? lastPutBody;
 
   @override
-  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
     postedBodies.add(body);
     if (error != null) throw error!;
     return {
