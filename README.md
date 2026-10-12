@@ -9,7 +9,7 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 **Backend (FastAPI)**
 - **Auth, perfil y hábitos:** `POST /auth/google`, `GET /auth/me`, `POST /auth/onboarding-complete`, `POST /auth/refresh`, `POST /auth/logout`, `GET/PUT /profile`, `GET/POST /habits`, `PUT /habits/{id}`.
 - **Chat:** `POST /chat`, `GET /chat/conversations`, `GET /chat/conversations/{id}/messages`, `DELETE /chat/conversations/{id}`.
-- **Administración:** panel web en `GET /admin` más `POST /admin/discovery`, `GET /admin/candidates`, `POST /admin/candidates/{id}/approve`, `POST /admin/candidates/{id}/reject` y `POST /admin/ingest`.
+- **Administración:** panel web en `GET /admin` más `POST /admin/discovery`, `GET /admin/candidates`, `POST /admin/candidates/{id}/approve`, `POST /admin/candidates/{id}/reject`, `POST /admin/ingest`, `GET /admin/documents` y `DELETE /admin/documents/{id}`.
 - Todos los endpoints privados exigen JWT válido (`get_current_user`). Los de `/admin` además exigen que el correo del usuario esté en `ADMIN_EMAILS` (`require_admin`): 401 sin sesión, 403 si no es admin.
 
 **Mobile (Flutter)**
@@ -23,7 +23,7 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 
 **RAG completo (Fase 3 del plan)** — ingesta (PDF → texto → limpieza → chunking → embeddings → Postgres), retrieval (similitud coseno en Python, sin pgvector — no está disponible en el entorno de desarrollo, ver `docs/decisions.md` D-12), integración con Gemini (`POST /chat`), y persistencia de conversaciones. Los embeddings los genera `intfloat/multilingual-e5-small` (configurable con `EMBEDDING_MODEL_NAME`) para que las preguntas en español encuentren documentos en inglés (D-20). Verificado extremo a extremo contra Postgres y la API real de Gemini (ver [`ingestion/README.md`](./ingestion/README.md), [`docs/rag-chat-progress.md`](./docs/rag-chat-progress.md) y `docs/decisions.md` D-12 a D-21).
 
-**Base de conocimiento administrable** — un administrador (correo en `ADMIN_EMAILS`) abre `/admin`, busca 30 artículos de acceso abierto en Europe PMC repartidos entre 7 dominios (sueño, alimentación, actividad física, hidratación, pantallas, estrés y consumo de sustancias), abre cada enlace para leerlo y aprueba o rechaza. Solo los aprobados se descargan, se les extraen los metadatos (autores, año, revista, DOI) y se indexan en segundo plano. Ver [Panel de administración](#7-panel-de-administración-opcional) y `docs/decisions.md` D-17 y D-21.
+**Base de conocimiento administrable** — un administrador (correo en `ADMIN_EMAILS`) abre `/admin`, busca 30 artículos de acceso abierto en Europe PMC repartidos entre 7 dominios (sueño, alimentación, actividad física, hidratación, pantallas, estrés y consumo de sustancias), abre cada enlace para leerlo y aprueba o rechaza. Solo los aprobados se descargan, se les extraen los metadatos (autores, año, revista, DOI) y se indexan en segundo plano. El panel también lista el historial de documentos indexados y permite eliminarlos. Ver [Panel de administración](#7-panel-de-administración-opcional) y `docs/decisions.md` D-17 y D-21.
 
 **Pendiente** (ver `HABITQ_DEVELOPMENT_PLAN.md` para el detalle completo): hardening de seguridad general.
 
@@ -147,6 +147,7 @@ Sirve para ampliar la base de conocimiento sin tocar archivos a mano.
 3. Abre `http://localhost:8000/admin` (no `127.0.0.1`) e inicia sesión con Google.
 4. Elige los dominios → **Buscar 30 documentos** → abre el artículo, el PDF o el DOI de cada candidato → **Aprobar** o **Rechazar** → **Indexar aprobados**.
 5. Pregunta en el chat sobre ese tema: la respuesta trae las referencias.
+6. En «3. Historial de documentos» ves todo lo indexado (también lo cargado por línea de comandos) y puedes **Eliminar** un documento (pide confirmación).
 
 | Detalle | Comportamiento |
 |---|---|
@@ -154,6 +155,7 @@ Sirve para ampliar la base de conocimiento sin tocar archivos a mano.
 | Qué se descarga | Solo lo aprobado. Los rechazados y los ya vistos no se vuelven a proponer |
 | Indexación | En segundo plano; el panel se actualiza solo (Indexando… → Indexado o Falló) |
 | Si el servidor se cae a mitad | El candidato aparece como **Bloqueado** tras 15 min sin avance; **Indexar aprobados** lo reintenta y no duplica el documento (D-21) |
+| Eliminar un documento | Borra el documento y sus chunks en una transacción y marca su candidato como rechazado para que no se vuelva a proponer. El PDF queda en disco. Los mensajes de chat pasados conservan el texto de la referencia (D-22) |
 | PDFs descargados | Quedan en `ingestion/data/scientific_documents/`; no los commitees |
 | Acceso | Sin sesión, 401; con un correo fuera de `ADMIN_EMAILS`, 403 |
 | Sin configurar el origen de Google | El panel acepta un JWT pegado a mano (sección «Alternativa» del login) |

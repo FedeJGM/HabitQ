@@ -1,6 +1,6 @@
 # Casos de uso — implementados
 
-Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involucrados. Cubre solo lo construido; para el alcance completo del MVP ver `HABITQ_DEVELOPMENT_PLAN.md`, sección 2. UC-01 a UC-10 son de la persona usuaria; UC-11 a UC-16 son de administración de la base de conocimiento (D-17, D-21).
+Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involucrados. Cubre solo lo construido; para el alcance completo del MVP ver `HABITQ_DEVELOPMENT_PLAN.md`, sección 2. UC-01 a UC-10 son de la persona usuaria; UC-11 a UC-18 son de administración de la base de conocimiento (D-17, D-21).
 
 ## UC-01 — Iniciar sesión con Google
 
@@ -129,7 +129,7 @@ Estos casos los ejecuta una persona administradora (`ADMIN_EMAILS`) desde el pan
 - **Flujo principal:**
   1. Abre `http://localhost:8000/admin`.
   2. Inicia sesión con Google (el panel usa el mismo `POST /auth/google` que la app).
-  3. El panel consulta `GET /admin/candidates`; si el backend responde 200, muestra «Buscar documentos» y «Revisar candidatos».
+  3. El panel consulta `GET /admin/candidates`; si el backend responde 200, muestra «Buscar documentos», «Revisar candidatos» y «Historial de documentos».
 - **Postcondición:** JWT guardado en `sessionStorage`. Con un correo que no está en la lista el backend responde 403 y el panel dice «Esta cuenta no es administradora».
 - **Endpoints:** `GET /admin` (público), `POST /auth/google`, `GET /admin/candidates`.
 
@@ -186,3 +186,24 @@ Estos casos los ejecuta una persona administradora (`ADMIN_EMAILS`) desde el pan
   3. Por cada documento, reconstruye los chunks desde su PDF (o re-vectoriza el texto guardado si el PDF ya no está), todo en una transacción.
 - **Postcondición:** Todos los chunks tienen vectores del modelo activo. Sin este paso el chat no falla pero recupera fragmentos equivocados, porque compara vectores de modelos distintos. Si un documento falla conserva sus chunks anteriores y el script se puede repetir.
 - **Endpoints:** Ninguno — `ingestion/scripts/reindex.py`.
+
+## UC-17 — Consultar el historial de documentos indexados
+
+- **Actor:** Administrador.
+- **Precondición:** UC-11 completado.
+- **Flujo principal:**
+  1. Abre la sección «3. Historial de documentos» del panel.
+  2. El panel consulta `GET /admin/documents` (opcionalmente filtrado por dominio) y muestra una tarjeta por documento, del más nuevo al más antiguo, con su número de chunks.
+- **Postcondición:** Solo lectura. La lista incluye los documentos indexados desde el panel y los cargados por línea de comandos (`ingest.py`).
+- **Endpoints:** `GET /admin/documents`.
+
+## UC-18 — Eliminar un documento indexado
+
+- **Actor:** Administrador.
+- **Precondición:** El documento aparece en el historial (UC-17).
+- **Flujo principal:**
+  1. Pulsa «Eliminar» en la tarjeta y confirma.
+  2. El sistema borra los chunks del documento y el documento en una sola transacción.
+  3. Si hay un candidato `ingested` con el mismo DOI (sin distinguir mayúsculas), lo marca `rejected`.
+- **Postcondición:** El chat deja de recuperar ese documento y el descubrimiento no lo vuelve a proponer. El PDF permanece en disco. Los mensajes de chat anteriores conservan el texto de la referencia (`messages.sources` no es una FK). Documento inexistente: 404; éxito: 204.
+- **Endpoints:** `DELETE /admin/documents/{id}`.
