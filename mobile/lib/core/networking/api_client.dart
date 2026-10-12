@@ -21,12 +21,17 @@ class ApiClient {
   final http.Client _client;
   final Future<String?> Function() _tokenProvider;
 
-  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
+  /// [timeout] defaults to 15s; slow endpoints (e.g. POST /chat) pass a longer one.
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
     final response = await _send(() async {
       final headers = await _headers();
       return _client
           .post(_uri(path), headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 15));
+          .timeout(timeout);
     });
     return _decode(response);
   }

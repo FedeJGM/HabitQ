@@ -24,6 +24,37 @@ void main() {
       expect(result, {'ok': true});
     });
 
+    test('post succeeds when the response arrives within a custom timeout', () async {
+      final mockClient = MockClient((request) async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        return http.Response(jsonEncode({'ok': true}), 200);
+      });
+
+      final apiClient = ApiClient(client: mockClient, tokenProvider: () async => null);
+
+      final result = await apiClient.post(
+        '/chat',
+        {'message': 'hi'},
+        timeout: const Duration(seconds: 1),
+      );
+
+      expect(result, {'ok': true});
+    });
+
+    test('post throws ApiException when the response exceeds a custom timeout', () async {
+      final mockClient = MockClient((request) async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        return http.Response(jsonEncode({'ok': true}), 200);
+      });
+
+      final apiClient = ApiClient(client: mockClient, tokenProvider: () async => null);
+
+      await expectLater(
+        apiClient.post('/chat', {'message': 'hi'}, timeout: const Duration(milliseconds: 10)),
+        throwsA(isA<ApiException>()),
+      );
+    });
+
     test('get attaches Authorization header when a token is stored', () async {
       http.Request? capturedRequest;
       final mockClient = MockClient((request) async {

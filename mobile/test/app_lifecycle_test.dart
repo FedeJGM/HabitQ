@@ -17,7 +17,11 @@ class _FakeApiClient implements ApiClient {
   Future<Map<String, dynamic>> get(String path) async => response ?? {};
 
   @override
-  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
     postedPaths.add(path);
     return response ?? {};
   }
