@@ -90,7 +90,7 @@ Fuentes verificables
 - Google Fit.
 - Apple Health.
 - Wearables.
-- Panel administrativo. *(Actualización 2026-10-10: se implementó un panel web mínimo, solo para que un administrador apruebe qué documentos entran a la base de conocimiento; ver `docs/decisions.md` D-17 y D-21.)*
+- Panel administrativo. *(Actualización 2026-10-10: se implementó un panel web mínimo, solo para que un administrador apruebe qué documentos entran a la base de conocimiento; ver `docs/decisions.md` D-17 y D-21. Actualización 2026-10-12: el panel también lista el historial de documentos indexados y permite eliminarlos; ver D-22.)*
 - Fine-tuning.
 - Entrenamiento de modelos.
 - Microservicios.

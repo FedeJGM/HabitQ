@@ -255,3 +255,15 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Alternativas descartadas:** (a) resetear todos los `ingesting` al arrancar la app: asume un único proceso y pisaría el trabajo de otro worker; (b) un botón de reintento por candidato: con el umbral de latido, "Indexar aprobados" ya cubre el caso sin otro endpoint.
 
 **Verificado:** en la base real se simuló un candidato dejado en `ingesting` hace una hora: se detectó, se recuperó, se indexó con el modelo real y un segundo reintento no creó un documento duplicado.
+
+---
+
+## D-22 — Historial y eliminación de documentos indexados desde el panel
+
+**Contexto:** el panel solo mostraba candidatos; no había forma de ver qué estaba indexado (incluido lo cargado por CLI) ni de retirar un documento malo sin tocar la base a mano.
+
+**Decisión (2026-10-12):** `GET /admin/documents` (filtro opcional `domain`) lista `scientific_documents` del más nuevo al más antiguo con `chunk_count`; `DELETE /admin/documents/{id}` (204; 404 si no existe) lo elimina. Ambos son solo para admin y viven en `document_history_service.py`. El panel suma la sección «3. Historial de documentos» con un botón «Eliminar» con confirmación por tarjeta.
+
+**Eliminación:** `document_chunks` no tiene `ON DELETE CASCADE`, así que se borran primero los chunks y luego el documento, todo en una transacción. El candidato `ingested` con el mismo DOI (sin distinguir mayúsculas) pasa a `rejected`, de modo que el descubrimiento no lo proponga de nuevo (D-17). El PDF se conserva en disco. No se agregó migración.
+
+**Limitación conocida:** `messages.sources` guarda un snapshot de texto, no una FK (D-18), por lo que los mensajes de chat anteriores siguen mostrando la referencia de un documento ya eliminado.
