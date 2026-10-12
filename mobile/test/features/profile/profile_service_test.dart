@@ -26,7 +26,11 @@ class _FakeApiClient implements ApiClient {
   }
 
   @override
-  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) {
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 15),
+  }) {
     throw UnimplementedError();
   }
 
