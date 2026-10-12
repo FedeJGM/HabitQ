@@ -94,6 +94,12 @@
       </div>
       <div id="list"></div>
     </section>
+
+    <section>
+      <h2>3. Historial de documentos</h2>
+      <p class="muted">Documentos que ya están indexados y se usan en las respuestas del chat, del más reciente al más antiguo.</p>
+      <div id="documents"></div>
+    </section>
   </div>
 </main>
 
@@ -117,6 +123,7 @@ const STATUS_LABELS = {
 
 let token = null;
 let pollTimer = null;
+let polling = false;
 
 // All dynamic text goes through textContent: titles and abstracts come from a
 // third party and must never be interpreted as markup.
@@ -200,6 +207,7 @@ async function loginWithGoogle(credentialResponse) {
 async function enter() {
   try {
     await loadCandidates();
+    await loadDocuments();
     showApp(true);
     say("");
   } catch (error) {
@@ -267,7 +275,45 @@ async function loadCandidates() {
   // A stuck one is not going to change by itself: don't keep polling for it.
   if (candidates.some((c) => c.status === "ingesting" && !c.stuck)) {
     pollTimer = setTimeout(() => loadCandidates().catch((e) => say(e.message, true)), 5000);
+  } else if (polling) {
+    // The batch just finished: the new papers are now part of the history.
+    await loadDocuments();
   }
+  polling = candidates.some((c) => c.status === "ingesting" && !c.stuck);
+}
+
+function documentCard(doc) {
+  const meta = [doc.authors, doc.journal, doc.year, doc.language].filter(Boolean).join(" · ");
+  const indexed = new Date(doc.created_at).toLocaleDateString("es");
+
+  const links = el("div", { class: "links" });
+  const pairs = [
+    ["Abrir artículo", doc.source_url],
+    ["DOI", doc.doi ? "https://doi.org/" + doc.doi : null],
+  ];
+  for (const [label, href] of pairs) {
+    const safe = href && safeUrl(href);
+    if (safe) links.append(el("a", { text: label, href: safe, target: "_blank", rel: "noopener noreferrer" }));
+  }
+
+  return el("div", { class: "candidate" },
+    el("h3", { text: doc.title }),
+    el("div", { class: "row" },
+      el("span", { class: "badge", text: DOMAIN_LABELS[doc.domain] || doc.domain || "Sin dominio" }),
+      el("span", { class: "muted", text: meta })),
+    el("div", { class: "muted", text: "Indexado el " + indexed + " · " + doc.chunk_count + " fragmentos" }),
+    links);
+}
+
+async function loadDocuments() {
+  const documents = await api("/admin/documents");
+  const container = document.getElementById("documents");
+  container.replaceChildren();
+  if (documents.length === 0) {
+    container.append(el("p", { class: "muted", text: "Todavía no hay documentos indexados." }));
+    return;
+  }
+  for (const doc of documents) container.append(documentCard(doc));
 }
 
 async function review(id, action) {

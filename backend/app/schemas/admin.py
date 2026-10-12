@@ -58,3 +58,17 @@ class IngestResponse(BaseModel):
     queued: int
     # Candidates found stuck in "ingesting" and put back in the queue.
     recovered: int = 0
+
+
+class DocumentOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    authors: str | None
+    journal: str | None
+    year: int | None
+    doi: str | None
+    domain: str | None
+    language: str
+    source_url: str | None
+    created_at: datetime
+    chunk_count: int

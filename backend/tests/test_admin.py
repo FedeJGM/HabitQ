@@ -10,6 +10,8 @@ from app.api.routes import admin as admin_routes
 from app.core.config import settings
 from app.main import app
 from app.models.document_candidate import DocumentCandidate
+from app.models.document_chunk import DocumentChunk
+from app.models.scientific_document import ScientificDocument
 from app.models.user import User
 
 client = TestClient(app)
@@ -155,6 +157,7 @@ def _admin_emails(monkeypatch):
 _ADMIN_ENDPOINTS = [
     ("post", "/admin/discovery"),
     ("get", "/admin/candidates"),
+    ("get", "/admin/documents"),
     ("post", f"/admin/candidates/{uuid.uuid4()}/approve"),
     ("post", f"/admin/candidates/{uuid.uuid4()}/reject"),
     ("post", "/admin/ingest"),
@@ -379,3 +382,53 @@ def test_list_candidates_flags_the_ones_that_look_stuck() -> None:
     body = client.get("/admin/candidates").json()
 
     assert {c["external_id"]: c["stuck"] for c in body} == {"PMC1": True, "PMC2": False, "PMC3": False}
+
+
+# --- GET /admin/documents ---
+
+
+def _document(title: str, days_ago: int, domain: str = "sleep") -> ScientificDocument:
+    return ScientificDocument(
+        id=uuid.uuid4(), title=title, authors="Doe J.", organization="Sleep Journal", year=2024,
+        language="eng", source_url="https://example.org/paper", doi="10.1/x", domain=domain,
+        file_path=f"{title}.pdf", created_at=datetime.now(timezone.utc) - timedelta(days=days_ago),
+    )
+
+
+def _chunk(document: ScientificDocument, index: int) -> DocumentChunk:
+    return DocumentChunk(id=uuid.uuid4(), document_id=document.id, content="x", chunk_index=index, embedding=[0.0])
+
+
+def test_list_documents_returns_newest_first_with_chunk_counts() -> None:
+    old, new = _document("Old", days_ago=10), _document("New", days_ago=1)
+    _setup(seed=[old, new, _chunk(old, 0), _chunk(new, 0), _chunk(new, 1)])
+
+    body = client.get("/admin/documents").json()
+
+    assert [(d["title"], d["chunk_count"]) for d in body] == [("New", 2), ("Old", 1)]
+    assert body[0]["journal"] == "Sleep Journal"
+    assert body[0]["domain"] == "sleep"
+
+
+def test_list_documents_can_filter_by_domain() -> None:
+    sleep, stress = _document("Sleep", 1, "sleep"), _document("Stress", 2, "stress")
+    _setup(seed=[sleep, stress])
+
+    body = client.get("/admin/documents", params={"domain": "stress"}).json()
+
+    assert [d["title"] for d in body] == ["Stress"]
+    assert body[0]["chunk_count"] == 0
+
+
+def test_list_documents_is_empty_when_nothing_is_indexed() -> None:
+    _setup()
+
+    assert client.get("/admin/documents").json() == []
+
+
+def test_panel_has_a_documents_history_section_rendered_with_el() -> None:
+    html = client.get("/admin").text
+
+    assert "3. Historial de documentos" in html
+    assert "/admin/documents" in html
+    assert "innerHTML" not in html

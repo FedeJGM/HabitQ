@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.document_candidate import DocumentCandidate
 from app.models.user import User
-from app.schemas.admin import CandidateOut, DiscoveryRequest, IngestResponse, RunOut
+from app.schemas.admin import CandidateOut, DiscoveryRequest, DocumentOut, IngestResponse, RunOut
 from app.services.candidate_ingestion_service import ingest_approved
 from app.services.candidate_service import (
     CandidateStateError,
@@ -24,6 +24,7 @@ from app.services.candidate_service import (
     reject_candidate,
 )
 from app.services.discovery_service import DOMAIN_QUERIES, discover_candidates, europe_pmc_fetch
+from app.services.document_history_service import list_ingested_documents
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -116,6 +117,30 @@ def list_candidates(
         query = query.filter(DocumentCandidate.status == status_filter)
     candidates = query.order_by(DocumentCandidate.domain, DocumentCandidate.title).all()
     return [_candidate_out(c) for c in candidates]
+
+
+@router.get("/documents", response_model=list[DocumentOut])
+def list_documents(
+    domain: str | None = None,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> list[DocumentOut]:
+    return [
+        DocumentOut(
+            id=doc.id,
+            title=doc.title,
+            authors=doc.authors,
+            journal=doc.organization,
+            year=doc.year,
+            doi=doc.doi,
+            domain=doc.domain,
+            language=doc.language,
+            source_url=doc.source_url,
+            created_at=doc.created_at,
+            chunk_count=chunks,
+        )
+        for doc, chunks in list_ingested_documents(db, domain)
+    ]
 
 
 @router.post("/candidates/{candidate_id}/approve", response_model=CandidateOut)
