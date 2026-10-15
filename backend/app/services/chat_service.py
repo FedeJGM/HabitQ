@@ -13,6 +13,7 @@ from app.models.profile import Profile
 from app.models.scientific_document import ScientificDocument
 from app.services.llm_service import generate_answer
 from app.services.retrieval_service import retrieve_top_chunks
+from app.services.user_context_labels import HABIT_LABELS, MAIN_GOAL_LABELS
 
 
 @dataclass(frozen=True)
@@ -62,19 +63,28 @@ def source_to_dict(source: SourceRef) -> dict:
     }
 
 
+def _describe_habit(habit: HabitRecord) -> str:
+    entry = HABIT_LABELS.get((habit.domain, habit.key))
+    if entry is None:
+        return f"{habit.domain}.{habit.key}: {habit.value}"
+    question, options = entry
+    return f"{question}: {options.get(habit.value, habit.value)}"
+
+
 def build_user_context(profile: Profile | None, habits: list[HabitRecord]) -> str | None:
     if profile is None and not habits:
         return None
 
     lines: list[str] = []
     if profile is not None:
+        goal = MAIN_GOAL_LABELS.get(profile.main_goal, profile.main_goal)
         lines.append(
-            f"Perfil: rango de edad {profile.age_range}, objetivo principal {profile.main_goal}."
+            f"Perfil: rango de edad {profile.age_range}, objetivo principal {goal}."
         )
     if habits:
         lines.append("Hábitos registrados:")
         for habit in habits:
-            lines.append(f"- {habit.domain}.{habit.key}: {habit.value}")
+            lines.append(f"- {_describe_habit(habit)}")
 
     return "\n".join(lines)
 

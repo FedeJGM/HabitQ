@@ -593,7 +593,8 @@ def test_build_user_context_with_profile_only() -> None:
     context = build_user_context(profile, [])
     assert context is not None
     assert "25-34" in context
-    assert "sleep_better" in context
+    assert "Dormir mejor" in context
+    assert "sleep_better" not in context
     assert "Hábitos" not in context
 
 
@@ -601,8 +602,9 @@ def test_build_user_context_with_habits_only() -> None:
     habit = HabitRecord(user_id=uuid.uuid4(), domain="sleep", key="hours", value="5_6")
     context = build_user_context(None, [habit])
     assert context is not None
-    assert "sleep.hours" in context
-    assert "5_6" in context
+    assert "Horas de sueño habituales: 5–6" in context
+    assert "sleep.hours" not in context
+    assert "5_6" not in context
     assert "Perfil" not in context
 
 
@@ -611,7 +613,34 @@ def test_build_user_context_with_profile_and_habits() -> None:
     habit = HabitRecord(user_id=uuid.uuid4(), domain="sleep", key="hours", value="5_6")
     context = build_user_context(profile, [habit])
     assert "25-34" in context
-    assert "sleep.hours" in context
+    assert "Horas de sueño habituales: 5–6" in context
+
+
+def test_build_user_context_describes_every_habit_question_in_plain_spanish() -> None:
+    habits = [
+        HabitRecord(user_id=uuid.uuid4(), domain="sleep", key="screen_before_bed", value="often"),
+        HabitRecord(user_id=uuid.uuid4(), domain="nutrition", key="fast_food", value="weekly_3_plus"),
+        HabitRecord(user_id=uuid.uuid4(), domain="screen_time", key="recreational_hours", value="more_4h"),
+    ]
+    context = build_user_context(None, habits)
+    assert "Frecuentemente" in context
+    assert "3 o más veces por semana" in context
+    assert "Más de 4 horas" in context
+    assert "weekly_3_plus" not in context
+
+
+def test_build_user_context_falls_back_to_raw_codes_for_unknown_habits() -> None:
+    unknown_key = HabitRecord(user_id=uuid.uuid4(), domain="sleep", key="nap_length", value="long")
+    unknown_value = HabitRecord(user_id=uuid.uuid4(), domain="sleep", key="hours", value="12_plus")
+    context = build_user_context(None, [unknown_key, unknown_value])
+    assert "sleep.nap_length: long" in context
+    assert "Horas de sueño habituales: 12_plus" in context
+
+
+def test_build_user_context_keeps_raw_goal_when_it_is_unknown() -> None:
+    profile = Profile(user_id=uuid.uuid4(), age_range="25-34", main_goal="learn_to_fly")
+    context = build_user_context(profile, [])
+    assert "learn_to_fly" in context
 
 
 # --- POST /chat personalization ---
@@ -630,8 +659,7 @@ def test_send_chat_message_includes_user_context_when_profile_and_habits_exist()
     assert response.status_code == 201
     sent_prompt = gemini_client.models.calls[-1]["contents"]
     assert "25-34" in sent_prompt
-    assert "sleep.hours" in sent_prompt
-    assert "5_6" in sent_prompt
+    assert "Horas de sueño habituales: 5–6" in sent_prompt
 
 
 def test_send_chat_message_omits_user_context_section_without_profile_or_habits() -> None:
