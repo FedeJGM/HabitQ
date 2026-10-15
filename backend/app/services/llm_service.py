@@ -3,7 +3,7 @@ from google.genai import types
 
 from app.core.config import settings
 
-_MODEL = "gemini-flash-latest"
+_MODEL = "gemini-3.5-flash-lite"
 
 # The SDK already retries 408/429/5xx with exponential backoff + jitter by
 # default (attempts=5, up to 60s max delay) — good defaults for a batch job,

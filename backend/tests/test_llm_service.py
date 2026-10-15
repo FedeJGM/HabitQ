@@ -78,7 +78,7 @@ def test_generate_answer_sends_the_built_prompt_to_the_configured_model() -> Non
 
     assert len(client.models.calls) == 1
     call = client.models.calls[0]
-    assert call["model"] == "gemini-flash-latest"
+    assert call["model"] == "gemini-3.5-flash-lite"
     assert "¿Cuánto debo dormir?" in call["contents"]
     assert "chunk relevante" in call["contents"]
 
