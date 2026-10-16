@@ -4,6 +4,7 @@ import 'package:mobile/app_routes.dart';
 import 'package:mobile/core/networking/api_client.dart';
 import 'package:mobile/features/auth/auth_service.dart';
 import 'package:mobile/features/auth/user.dart';
+import 'package:mobile/features/chat/chat_service.dart';
 import 'package:mobile/features/home/home_screen.dart';
 
 class _FakeAuthService extends AuthService {
@@ -25,17 +26,47 @@ class _FakeAuthService extends AuthService {
   }
 }
 
+class _FakeChatService extends ChatService {
+  _FakeChatService({this.conversations = const [], this.fetchError});
+
+  List<ConversationSummary> conversations;
+  ApiException? fetchError;
+
+  @override
+  Future<List<ConversationSummary>> fetchConversations() async {
+    if (fetchError != null) throw fetchError!;
+    return conversations;
+  }
+}
+
+ConversationSummary _conversation(String id, {String? title}) => ConversationSummary(
+      id: id,
+      title: title,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    );
+
 void main() {
-  Widget buildApp(AuthService authService, {DateTime? now}) {
+  Object? chatArguments;
+
+  Widget buildApp(AuthService authService, {DateTime? now, ChatService? chatService}) {
     final fixedNow = now ?? DateTime(2026, 1, 1, 10);
+    chatArguments = 'not opened';
     return MaterialApp(
       routes: {
         AppRoutes.login: (_) => const Scaffold(body: Text('Login')),
         AppRoutes.habits: (_) => const Scaffold(body: Text('Habits')),
         AppRoutes.profile: (_) => const Scaffold(body: Text('Profile')),
-        AppRoutes.chat: (_) => const Scaffold(body: Text('Chat')),
+        AppRoutes.chat: (context) {
+          chatArguments = ModalRoute.of(context)?.settings.arguments;
+          return const Scaffold(body: Text('Chat'));
+        },
       },
-      home: HomeScreen(authService: authService, now: () => fixedNow),
+      home: HomeScreen(
+        authService: authService,
+        chatService: chatService ?? _FakeChatService(),
+        now: () => fixedNow,
+      ),
     );
   }
 
@@ -175,6 +206,86 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Chat'), findsOneWidget);
+  });
+
+  group('chat entry points', () {
+    Future<void> pump(WidgetTester tester, ChatService chatService) async {
+      await tester.pumpWidget(buildApp(_FakeAuthService(userToReturn: alice), chatService: chatService));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('first conversation: shows only the single Chat con HabitQ card', (tester) async {
+      await pump(tester, _FakeChatService());
+
+      expect(find.text('Chat con HabitQ'), findsOneWidget);
+      expect(find.text('Nuevo chat con HabitQ'), findsNothing);
+      expect(find.text('Continuar conversación'), findsNothing);
+    });
+
+    testWidgets('with past conversations: shows Continuar and Nuevo chat instead', (tester) async {
+      await pump(tester, _FakeChatService(conversations: [_conversation('c2'), _conversation('c1')]));
+
+      expect(find.text('Continuar conversación'), findsOneWidget);
+      expect(find.text('Nuevo chat con HabitQ'), findsOneWidget);
+      expect(find.text('Chat con HabitQ'), findsNothing);
+    });
+
+    testWidgets('Continuar subtitle shows the latest conversation title', (tester) async {
+      await pump(
+        tester,
+        _FakeChatService(conversations: [_conversation('c2', title: 'Mi sueño'), _conversation('c1')]),
+      );
+
+      expect(find.text('Mi sueño'), findsOneWidget);
+    });
+
+    testWidgets('Continuar subtitle falls back when the conversation has no title', (tester) async {
+      await pump(tester, _FakeChatService(conversations: [_conversation('c2')]));
+
+      expect(find.text('Retoma donde lo dejaste'), findsOneWidget);
+    });
+
+    testWidgets('Continuar opens the most recent conversation', (tester) async {
+      await pump(tester, _FakeChatService(conversations: [_conversation('c2'), _conversation('c1')]));
+
+      await tester.tap(find.text('Continuar conversación'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Chat'), findsOneWidget);
+      expect(chatArguments, 'c2');
+    });
+
+    testWidgets('Nuevo chat opens an empty chat', (tester) async {
+      await pump(tester, _FakeChatService(conversations: [_conversation('c2')]));
+
+      await tester.tap(find.text('Nuevo chat con HabitQ'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Chat'), findsOneWidget);
+      expect(chatArguments, isNull);
+    });
+
+    testWidgets('falls back to the single card when conversations cannot be loaded', (tester) async {
+      await pump(tester, _FakeChatService(fetchError: ApiException('boom')));
+
+      expect(find.text('Chat con HabitQ'), findsOneWidget);
+      expect(find.text('Continuar conversación'), findsNothing);
+    });
+
+    testWidgets('after a first chat, coming back to Inicio shows both buttons', (tester) async {
+      final chatService = _FakeChatService();
+      await pump(tester, chatService);
+      expect(find.text('Chat con HabitQ'), findsOneWidget);
+
+      await tester.tap(find.text('Chat con HabitQ'));
+      await tester.pumpAndSettle();
+      chatService.conversations = [_conversation('c1')];
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Continuar conversación'), findsOneWidget);
+      expect(find.text('Nuevo chat con HabitQ'), findsOneWidget);
+    });
   });
 
   testWidgets('navigates to Mis hábitos when its card is tapped', (tester) async {
