@@ -13,9 +13,12 @@ import '../auth/user.dart';
 /// Chat and Mis hábitos (Perfil lives in the bottom navigation). No task list:
 /// the backend has no daily tasks.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.authService});
+  const HomeScreen({super.key, this.authService, this.now});
 
   final AuthService? authService;
+
+  /// Clock used to pick the greeting; injectable so tests can fix the hour.
+  final DateTime Function()? now;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -71,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isLoading: _isLoadingUser,
               errorMessage: _errorMessage,
               userName: _user?.name,
+              isNight: _isNight((widget.now ?? DateTime.now)().hour),
             ),
             const SizedBox(height: 24),
             HabitQCard(
@@ -111,6 +115,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Night runs from 19:00 to 04:59; everything else keeps the daytime greeting.
+  static bool _isNight(int hour) => hour >= 19 || hour < 5;
+
   static const _cardTitle = TextStyle(
     fontFamily: AppTheme.fontFamily,
     fontWeight: FontWeight.w500,
@@ -137,11 +144,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Greeting card: avatar with initials, greeting copy and the sun illustration.
+/// Greeting card: avatar with initials, greeting copy and the sun illustration
+/// (cloud with moon at night).
 class _GreetingCard extends StatelessWidget {
-  const _GreetingCard({required this.isLoading, this.errorMessage, this.userName});
+  const _GreetingCard({
+    required this.isLoading,
+    required this.isNight,
+    this.errorMessage,
+    this.userName,
+  });
 
   final bool isLoading;
+  final bool isNight;
   final String? errorMessage;
   final String? userName;
 
@@ -188,7 +202,9 @@ class _GreetingCard extends StatelessWidget {
               Container(
                 width: 86,
                 color: const Color(0xFFF4F5FC),
-                child: Image.asset('assets/images/sun.png', fit: BoxFit.contain),
+                child: isNight
+                    ? const Icon(Icons.nights_stay, size: 44, color: AppColors.primary)
+                    : Image.asset('assets/images/sun.png', fit: BoxFit.contain),
               ),
             ],
           ),
@@ -230,9 +246,9 @@ class _GreetingCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Es un nuevo día.',
-          style: TextStyle(
+        Text(
+          isNight ? 'Es una gran noche.' : 'Es un nuevo día.',
+          style: const TextStyle(
             fontFamily: AppTheme.fontFamily,
             fontWeight: FontWeight.w500,
             fontSize: 14,
