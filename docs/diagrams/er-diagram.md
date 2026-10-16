@@ -1,8 +1,8 @@
 # Modelo entidad-relación
 
-## Implementado (migraciones `0001`–`0008`)
+## Implementado (migraciones `0001`–`0009`)
 
-9 tablas. Las siete primeras (`0001`–`0005`) son el modelo de datos del plan (sección 8). `discovery_runs` y `document_candidates` (`0006`) son un agregado posterior para el panel de administración (D-17); `0007` agrega `messages.sources` (D-18) y `0008` agrega `document_candidates.heartbeat_at` (D-21).
+11 tablas. Las siete primeras (`0001`–`0005`) son el modelo de datos del plan (sección 8). `discovery_runs` y `document_candidates` (`0006`) son un agregado posterior para el panel de administración (D-17); `0007` agrega `messages.sources` (D-18) y `0008` agrega `document_candidates.heartbeat_at` (D-21). `daily_tasks` y `task_progress` (`0009`) son el checklist diario (D-23, D-24).
 
 ```mermaid
 erDiagram
@@ -13,6 +13,8 @@ erDiagram
     CONVERSATIONS ||--o{ MESSAGES : "contiene"
     USERS ||--o{ DISCOVERY_RUNS : "lanza (admin)"
     DISCOVERY_RUNS ||--o{ DOCUMENT_CANDIDATES : "propone"
+    USERS ||--o{ DAILY_TASKS : "activa"
+    DAILY_TASKS ||--o{ TASK_PROGRESS : "registra por día"
 
     USERS {
         uuid id PK
@@ -109,6 +111,24 @@ erDiagram
         timestamp reviewed_at
         timestamp heartbeat_at "0008 — último latido del lote que lo indexa"
     }
+
+    DAILY_TASKS {
+        uuid id PK
+        uuid user_id FK
+        varchar task_key "clave del catálogo en código (task_catalog.py), no una FK"
+        integer target "1 = casilla; mayor que 1 = contador"
+        time reminder_time "0009 — hora local del recordatorio, nullable"
+        timestamp created_at
+        timestamp archived_at "NULL = activa; asignado = quitada, conserva historial"
+    }
+
+    TASK_PROGRESS {
+        uuid id PK
+        uuid task_id FK
+        date day "fecha local de la persona, UNIQUE junto con task_id"
+        integer progress "de 0 a target"
+        timestamp updated_at
+    }
 ```
 
 **Notas de diseño (decisiones reales, ver [`../decisions.md`](../decisions.md)):**
@@ -118,4 +138,7 @@ erDiagram
 - `document_chunks.embedding` es `ARRAY(FLOAT)`, no `vector` de pgvector — pgvector no está disponible en el entorno de desarrollo (ver D-12 en `docs/decisions.md`). Su dimensión depende del modelo de embeddings activo (384 con `multilingual-e5-small`); al cambiar de modelo hay que reindexar (D-20).
 - `messages.conversation_id` no tiene `ondelete=CASCADE` — borrar una conversación borra primero sus mensajes explícitamente (`chat_service.delete_conversation`, con un `db.flush()` intermedio, necesario porque este proyecto no usa `relationship()` de SQLAlchemy y el unit-of-work no infiere el orden de los DELETE por sí solo).
 - `messages.sources` es una **copia** (JSONB) de las referencias, no una relación con `scientific_documents`: la cita queda tal como se mostró aunque después se corrijan los metadatos del documento (D-18).
+- `daily_tasks.task_key` apunta al catálogo, que vive en código (`backend/app/services/task_catalog.py`), no en una tabla: cambiar el catálogo es un cambio de código revisado (D-24). El `target` se copia del catálogo al activar la tarea.
+- `daily_tasks` tiene un índice único **parcial** `(user_id, task_key) WHERE archived_at IS NULL`: una persona no puede tener la misma tarea activa dos veces, pero sí volver a activar una que archivó. `task_progress` es único por `(task_id, day)`.
+- `task_progress.day` es la **fecha local** que envía la app, no un instante UTC; el servidor solo acepta fechas a ±1 día de la suya. No hay zona horaria en `profiles` (D-24).
 - `document_candidates` **no** tiene FK hacia `scientific_documents`: el vínculo entre un candidato indexado y su documento es el `doi`, que también evita indexar dos veces el mismo artículo (D-21). `UNIQUE (run_id, external_id)` impide repetir un artículo dentro de una misma búsqueda; entre búsquedas la deduplicación la hace `candidate_service.known_identifiers`.

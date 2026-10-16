@@ -1,6 +1,6 @@
 # Casos de uso — implementados
 
-Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involucrados. Cubre solo lo construido; para el alcance completo del MVP ver `HABITQ_DEVELOPMENT_PLAN.md`, sección 2. UC-01 a UC-10 son de la persona usuaria; UC-11 a UC-18 son de administración de la base de conocimiento (D-17, D-21).
+Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involucrados. Cubre solo lo construido; para el alcance completo del MVP ver `HABITQ_DEVELOPMENT_PLAN.md`, sección 2. UC-01 a UC-10 y UC-19 a UC-22 son de la persona usuaria; UC-11 a UC-18 son de administración de la base de conocimiento (D-17, D-21). UC-19 a UC-22 son el checklist diario (D-23 a D-25).
 
 ## UC-01 — Iniciar sesión con Google
 
@@ -86,7 +86,7 @@ Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involu
 - **Actor:** Usuario autenticado.
 - **Precondición:** Ninguna especial — no requiere onboarding completo.
 - **Flujo principal:**
-  1. El usuario abre "Chat con HabitQ" desde Home.
+  1. El usuario abre el chat desde Home: con el botón único «Chat con HabitQ» si aún no tiene conversaciones, o con «Continuar conversación» (abre la más reciente) o «Nuevo chat con HabitQ» (chat vacío) si ya tiene alguna.
   2. Escribe una pregunta y la envía (se muestra de inmediato, envío optimista).
   3. El sistema recupera los fragmentos de evidencia más relevantes de `document_chunks` (similitud coseno, sin pgvector — ver `../decisions.md` D-12; embeddings multilingües, D-20), arma un prompt con esa evidencia y, si es relevante, el perfil/hábitos del usuario (D-15), y llama a Gemini.
   4. El sistema guarda la pregunta y la respuesta como mensajes de la conversación (nueva o existente).
@@ -207,3 +207,47 @@ Estos casos los ejecuta una persona administradora (`ADMIN_EMAILS`) desde el pan
   3. Si hay un candidato `ingested` con el mismo DOI (sin distinguir mayúsculas), lo marca `rejected`.
 - **Postcondición:** El chat deja de recuperar ese documento y el descubrimiento no lo vuelve a proponer. El PDF permanece en disco. Los mensajes de chat anteriores conservan el texto de la referencia (`messages.sources` no es una FK). Documento inexistente: 404; éxito: 204.
 - **Endpoints:** `DELETE /admin/documents/{id}`.
+
+## UC-19 — Elegir las tareas diarias de mi objetivo
+
+- **Actor:** Usuario con perfil (objetivo principal definido en UC-03 o UC-06).
+- **Precondición:** Tiene un `main_goal` guardado; sin perfil no hay tareas disponibles.
+- **Flujo principal:**
+  1. El usuario abre la pestaña «Actividad» y toca el lápiz «Elegir tareas».
+  2. El sistema muestra las 4 tareas del catálogo de su objetivo, con un interruptor por tarea (las activas, encendidas).
+  3. El usuario enciende una tarea: el sistema la activa con la meta del catálogo (casilla, o contador con su unidad). O apaga una activa: el sistema la archiva.
+- **Postcondición:** Fila nueva en `daily_tasks` (o `archived_at` asignado). Activar una tarea que ya está activa responde 409; una tarea de otro objetivo o inexistente, 422. Quitar una tarea conserva su historial (D-24).
+- **Endpoints:** `GET /tasks/catalog`, `POST /tasks`, `DELETE /tasks/{id}`.
+
+## UC-20 — Marcar el avance de las tareas del día
+
+- **Actor:** Usuario con tareas activas (UC-19).
+- **Precondición:** Está viendo el día de hoy en la pestaña «Actividad».
+- **Flujo principal:**
+  1. El sistema carga las tareas de hoy, con el progreso de ese día.
+  2. El usuario marca la casilla de una tarea simple, o suma y resta en un contador (cada toque mueve un paso, nunca por debajo de 0 ni por encima de la meta).
+  3. El sistema guarda el progreso de ese día y marca la tarea como cumplida al llegar a la meta.
+- **Postcondición:** Una fila por tarea y día en `task_progress`. La lista parte en cero a la medianoche local de la persona: la app envía su fecha local y el servidor solo acepta fechas a ±1 día de su fecha UTC (D-24). La pantalla se recarga al volver a abrir la app en una fecha nueva.
+- **Endpoints:** `GET /tasks?day=YYYY-MM-DD`, `PUT /tasks/{id}/progress`.
+
+## UC-21 — Consultar días anteriores
+
+- **Actor:** Usuario con tareas activas.
+- **Precondición:** UC-20 usado en días anteriores.
+- **Flujo principal:**
+  1. En la franja semanal de «Actividad» toca un día anterior de la semana actual.
+  2. El sistema muestra las tareas y el progreso de ese día en solo lectura, con el aviso «Solo lectura».
+- **Postcondición:** Solo lectura: no se puede marcar, sumar, cambiar recordatorios ni elegir tareas, y los días futuros no se abren. Una tarea que la persona quitó se ve ahí únicamente si tuvo progreso ese día (D-24).
+- **Endpoints:** `GET /tasks?day=YYYY-MM-DD`.
+
+## UC-22 — Recibir un recordatorio de una tarea
+
+- **Actor:** Usuario con una tarea activa.
+- **Precondición:** Está en «Actividad», viendo hoy.
+- **Flujo principal:**
+  1. El usuario toca el reloj de una tarea y elige una hora (se muestra con AM/PM).
+  2. El sistema guarda la hora y, en Android 13+, pide el permiso de notificaciones.
+  3. El teléfono programa un aviso para cada uno de los próximos 7 días a esa hora y lo muestra como notificación local «HabitQ — Recordatorio: …».
+  4. Si la tarea ya está cumplida hoy, no avisa hoy; sí los días siguientes. Quitar la hora cancela los avisos.
+- **Postcondición:** `daily_tasks.reminder_time` guardado. Si el permiso se rechaza, la hora queda guardada y la tarea funciona sin aviso. Cerrar sesión cancela todos los recordatorios del teléfono. Son notificaciones locales a la hora fijada por la persona, sin servidor (D-25).
+- **Endpoints:** `PUT /tasks/{id}` (hora o `null`); la programación de avisos es local al dispositivo.

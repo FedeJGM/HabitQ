@@ -295,12 +295,12 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Contexto:** el backend guarda todas las marcas de tiempo en UTC y no tiene fechas ni zona horaria por usuario. El reinicio «después de medianoche» debe ocurrir en la medianoche de cada persona.
 
 **Decisión (2026-10-15):**
-- **Catálogo en código** (`backend/app/services/task_catalog.py`), no en tabla: por objetivo, una lista de `{key, label, target, unit}`. Lo sirve `GET /tasks/catalog` según `profile.main_goal`, de modo que la app no duplica los textos.
+- **Catálogo en código** (`backend/app/services/task_catalog.py`), no en tabla: por objetivo, 4 tareas con `{key, label, target, unit, step}`. `step` es lo que suma un toque en un contador (p. ej. «Caminar» suma de 5 en 5 hasta 30 min). Lo sirve `GET /tasks/catalog` según `profile.main_goal`, de modo que la app no duplica los textos. Solo se puede activar una tarea del catálogo del objetivo del perfil (422 si no; sin perfil no hay catálogo).
 - **Dos tablas** (migración `0009`): `daily_tasks` (tareas activadas por la persona: `task_key`, `target`, `reminder_time`, `archived_at`) y `task_progress` (`task_id`, `day DATE`, `progress`, único por `(task_id, day)`). Una tarea queda completada cuando `progress >= target`.
 - **Día por fecha local:** la app envía `day=YYYY-MM-DD` con la fecha de su celular y el servidor guarda por esa fecha. No se agrega zona horaria al perfil.
 - **Acotación en el servidor:** `day` solo se acepta dentro de ±1 día de la fecha UTC del servidor, lo que cubre cualquier huso horario sin que el servidor lo conozca.
 - **Días pasados:** se consultan, pero solo «hoy» es editable; lo hace cumplir la app.
-- **Quitar una tarea** la archiva (`archived_at`) y conserva su historial.
+- **Quitar una tarea** la archiva (`archived_at`) y conserva su historial. Una tarea archivada solo se lista en los días en que tiene progreso real (mayor que 0): un 0 es una tarea marcada y desmarcada, no historia. La respuesta lleva `archived: true` en esos casos; la app no la muestra hoy y la muestra en solo lectura en días pasados. (Corrige un defecto hallado en pruebas: una tarea archivada con un 0 seguía visible hoy y al tocarla daba 404.)
 
 **Alternativas descartadas:** (a) campo de zona horaria en el perfil: más piezas y más datos personales para el mismo resultado; (b) catálogo en tabla con panel de administración: sin necesidad en el MVP, un cambio de catálogo es un cambio de código revisado.
 
@@ -312,10 +312,19 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Contexto:** el plan excluye «Notificaciones inteligentes». El diseño de Actividad muestra un reloj de recordatorio por tarea y la persona responsable pidió incluirlo.
 
-**Decisión (2026-10-15):** el recordatorio es una **notificación local** programada en el celular a la hora que la persona elige (`daily_tasks.reminder_time`), repetida a diario. No hay servidor de notificaciones, ni envío push, ni lógica que decida cuándo avisar. Al abrir la app se reprograman a partir de `GET /tasks`. El texto es neutro y solo nombra la tarea. En Android 13 o superior se solicita el permiso de notificaciones y, si se rechaza, la tarea funciona sin recordatorio.
+**Decisión (2026-10-15, ajustada tras probar en dispositivo):** el recordatorio es una **notificación local** programada en el celular a la hora que la persona elige (`daily_tasks.reminder_time`). No hay servidor de notificaciones, ni envío push, ni lógica que decida cuándo avisar. El texto es neutro y solo nombra la tarea. Detalles:
+- **Una notificación por día, no una repetida:** se programan los próximos 7 días uno por uno y se refrescan cada vez que se abre la pestaña Actividad (`GET /tasks`). Así, si la tarea ya está hecha hoy, solo se omite el aviso de hoy; los de los días siguientes siguen. Marcar o desmarcar una tarea reprograma.
+- **Alarmas exactas:** se declara `USE_EXACT_ALARM` (Android 13+, se concede al instalar) y `SCHEDULE_EXACT_ALARM` hasta Android 12L. Si el permiso falta, ese aviso se programa como inexacto en vez de perderse.
+- **Ids estables** por tarea y día, derivados del id de la tarea, y la sincronización solo cancela las pendientes: no borra notificaciones ya mostradas ni una nueva reemplaza a otra.
+- **Permiso de notificaciones:** en Android 13+ se solicita al fijar un recordatorio. Si se rechaza, la hora se guarda y la tarea funciona sin aviso.
+- **Cerrar sesión** cancela todos los recordatorios del teléfono.
 
 **Por qué no contradice la exclusión:** lo excluido son las notificaciones *inteligentes* (decididas por el sistema). Aquí la persona fija la hora y el aviso es fijo.
 
-**Alternativas descartadas:** push desde el servidor (requiere servicio externo y credenciales, fuera del alcance).
+**Alternativas descartadas:** (a) push desde el servidor: requiere servicio externo y credenciales, fuera del alcance; (b) alarmas inexactas: la primera versión las usó y en el dispositivo (Android 16) una notificación programada a las 23:52 llegó unos 4 minutos tarde, y los avisos de días siguientes tienen una ventana de hasta 1 hora; (c) `SCHEDULE_EXACT_ALARM` en Android 14+: viene denegado y obliga a la persona a activarlo a mano en Ajustes.
 
-**Limitación conocida:** Android puede retrasar las notificaciones por ahorro de batería; no se promete una hora exacta.
+**Limitaciones conocidas:**
+- `USE_EXACT_ALARM` está pensado para apps de alarmas y calendario y Google Play lo restringe: sirve para la distribución por APK de este proyecto, pero habría que revisarlo (o cambiar a `SCHEDULE_EXACT_ALARM`) si algún día se publica en Play Store.
+- Los recordatorios se refrescan al abrir Actividad: si la persona no abre la app en más de 7 días, dejan de llegar hasta que la abra.
+- Un aviso que Android alcanzara a retrasar y que aún no se hubiera mostrado se cancelaría si la sincronización corre justo entonces.
+- No hay recordatorios en un día pasado ni se programa nada para tareas sin hora.
