@@ -144,9 +144,19 @@ Qué hace esto (para que sepas qué esperar en la terminal):
    (crea las tablas) y después levanta `uvicorn` en el puerto 8000.
 
 > **Puerto 5432:** el compose publica Postgres en el `5432` del host. Si ya
-> tienes un Postgres local en ese puerto, el contenedor `db` no podrá
-> arrancar: cambia `ports` del servicio `db` a `"5433:5432"` (y el puerto de
-> `DATABASE_URL` en el `.env` si vas a correr scripts desde tu máquina).
+> tienes un Postgres local en ese puerto, el contenedor `db` puede no
+> arrancar (en Linux y macOS suele fallar con «address already in use»). En
+> Windows ambos pueden quedar escuchando a la vez y no está garantizado a cuál
+> llega `localhost:5432`. Lo más seguro: cambia `ports` del servicio `db` a
+> `"5433:5432"` (y el puerto de `DATABASE_URL` en el `.env` si vas a correr
+> scripts desde tu máquina).
+>
+> **La base de Docker no es tu base local.** El compose crea su propio
+> Postgres (volumen `habitq_pgdata`, usuario `habitq`). Si ya tenías datos en
+> un Postgres instalado en tu PC, el backend de Docker **no los ve**: arranca
+> con una base vacía. Esos datos no se pierden, siguen en tu Postgres local;
+> para usarlos corre el backend con `backend/.venv` apuntando a esa base en
+> vez de usar el compose.
 
 Para correrlo en segundo plano en vez de bloquear la terminal:
 

@@ -290,6 +290,7 @@ habitq/
 │   │   │   ├── auth/
 │   │   │   ├── onboarding/
 │   │   │   ├── home/
+│   │   │   ├── activity/      # ampliación 2026-10-15 (D-23)
 │   │   │   ├── habits/
 │   │   │   ├── chat/
 │   │   │   └── profile/
@@ -489,9 +490,9 @@ PUT /tasks/{id}/progress
 
 ```http
 POST /chat
-GET /conversations
-GET /conversations/{id}/messages
-DELETE /conversations/{id}
+GET /chat/conversations
+GET /chat/conversations/{id}/messages
+DELETE /chat/conversations/{id}
 ```
 
 ---

@@ -36,7 +36,7 @@ Capas, de afuera hacia adentro:
 
 ### Regla de seguridad aplicada consistentemente
 
-Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos obtienen el usuario desde el JWT vía `get_current_user` (plan, sección 10). `PUT /habits/{id}` además verifica que el registro pertenezca al usuario autenticado antes de modificarlo, devolviendo 404 (no 403) si no es así, para no filtrar la existencia de registros ajenos.
+Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos obtienen el usuario desde el JWT vía `get_current_user` (plan, sección 10). `PUT /habits/{id}` además verifica que el registro pertenezca al usuario autenticado antes de modificarlo, devolviendo 404 (no 403) si no es así, para no filtrar la existencia de registros ajenos. Lo mismo hacen `PUT /tasks/{id}`, `DELETE /tasks/{id}` y `PUT /tasks/{id}/progress`: una tarea ajena, inexistente o ya archivada responde 404.
 
 ### Endpoints actuales
 
