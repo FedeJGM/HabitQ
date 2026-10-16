@@ -4,6 +4,7 @@ import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../auth/auth_service.dart';
+import '../chat/chat_service.dart';
 import '../../core/widgets/habitq_bottom_nav.dart';
 import '../../core/widgets/habitq_card.dart';
 import '../../core/widgets/habitq_shell.dart';
@@ -12,10 +13,18 @@ import '../auth/user.dart';
 /// Landing tab after login/onboarding: greeting card plus entry points to
 /// Chat and Mis hábitos (Perfil lives in the bottom navigation). No task list:
 /// the backend has no daily tasks.
+///
+/// Chat entry: a single "Chat con HabitQ" card until the user has a past
+/// conversation; from then on "Continuar conversación" (most recent one) and
+/// "Nuevo chat con HabitQ".
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.authService});
+  const HomeScreen({super.key, this.authService, this.chatService, this.now});
 
   final AuthService? authService;
+  final ChatService? chatService;
+
+  /// Clock used to pick the greeting; injectable so tests can fix the hour.
+  final DateTime Function()? now;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -23,15 +32,36 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final AuthService _authService;
+  late final ChatService _chatService;
   HabitQUser? _user;
   bool _isLoadingUser = true;
   String? _errorMessage;
+  ConversationSummary? _latestConversation;
 
   @override
   void initState() {
     super.initState();
     _authService = widget.authService ?? AuthService();
+    _chatService = widget.chatService ?? ChatService();
     _loadUser();
+    _loadLatestConversation();
+  }
+
+  /// The backend returns conversations most recent first. If they cannot be
+  /// loaded the home keeps the single "Chat con HabitQ" card: it still works.
+  Future<void> _loadLatestConversation() async {
+    try {
+      final conversations = await _chatService.fetchConversations();
+      if (!mounted) return;
+      setState(() => _latestConversation = conversations.isEmpty ? null : conversations.first);
+    } on ApiException {
+      // Fall back to the single card.
+    }
+  }
+
+  Future<void> _openChat({String? conversationId}) async {
+    await Navigator.of(context).pushNamed(AppRoutes.chat, arguments: conversationId);
+    if (mounted) _loadLatestConversation();
   }
 
   Future<void> _loadUser() async {
@@ -71,28 +101,30 @@ class _HomeScreenState extends State<HomeScreen> {
               isLoading: _isLoadingUser,
               errorMessage: _errorMessage,
               userName: _user?.name,
+              isNight: _isNight((widget.now ?? DateTime.now)().hour),
             ),
             const SizedBox(height: 24),
-            HabitQCard(
-              onTap: () => Navigator.of(context).pushNamed(AppRoutes.chat),
-              child: Row(
-                children: [
-                  const Icon(Icons.chat_bubble_outline, color: AppColors.primary, size: 30),
-                  const SizedBox(width: 16),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Chat con HabitQ', style: _cardTitle),
-                        SizedBox(height: 2),
-                        Text('¿Qué deseas preguntar?', style: _cardSubtitle),
-                      ],
-                    ),
-                  ),
-                  _arrowButton(),
-                ],
+            if (_latestConversation case final latest?) ...[
+              _chatCard(
+                icon: Icons.forum_outlined,
+                title: 'Continuar conversación',
+                subtitle: _continueSubtitle(latest),
+                onTap: () => _openChat(conversationId: latest.id),
               ),
-            ),
+              const SizedBox(height: 16),
+              _chatCard(
+                icon: Icons.chat_bubble_outline,
+                title: 'Nuevo chat con HabitQ',
+                subtitle: '¿Qué deseas preguntar?',
+                onTap: () => _openChat(),
+              ),
+            ] else
+              _chatCard(
+                icon: Icons.chat_bubble_outline,
+                title: 'Chat con HabitQ',
+                subtitle: '¿Qué deseas preguntar?',
+                onTap: () => _openChat(),
+              ),
             const SizedBox(height: 16),
             HabitQCard(
               onTap: () => Navigator.of(context).pushNamed(AppRoutes.habits),
@@ -110,6 +142,42 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  static String _continueSubtitle(ConversationSummary conversation) {
+    final title = conversation.title?.trim();
+    return title == null || title.isEmpty ? 'Retoma donde lo dejaste' : title;
+  }
+
+  Widget _chatCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return HabitQCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.primary, size: 30),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: _cardTitle),
+                const SizedBox(height: 2),
+                Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: _cardSubtitle),
+              ],
+            ),
+          ),
+          _arrowButton(),
+        ],
+      ),
+    );
+  }
+
+  /// Night runs from 19:00 to 04:59; everything else keeps the daytime greeting.
+  static bool _isNight(int hour) => hour >= 19 || hour < 5;
 
   static const _cardTitle = TextStyle(
     fontFamily: AppTheme.fontFamily,
@@ -137,11 +205,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Greeting card: avatar with initials, greeting copy and the sun illustration.
+/// Greeting card: avatar with initials, greeting copy and the sun illustration
+/// (cloud with moon at night).
 class _GreetingCard extends StatelessWidget {
-  const _GreetingCard({required this.isLoading, this.errorMessage, this.userName});
+  const _GreetingCard({
+    required this.isLoading,
+    required this.isNight,
+    this.errorMessage,
+    this.userName,
+  });
 
   final bool isLoading;
+  final bool isNight;
   final String? errorMessage;
   final String? userName;
 
@@ -188,7 +263,9 @@ class _GreetingCard extends StatelessWidget {
               Container(
                 width: 86,
                 color: const Color(0xFFF4F5FC),
-                child: Image.asset('assets/images/sun.png', fit: BoxFit.contain),
+                child: isNight
+                    ? const Icon(Icons.nights_stay, size: 44, color: AppColors.primary)
+                    : Image.asset('assets/images/sun.png', fit: BoxFit.contain),
               ),
             ],
           ),
@@ -230,9 +307,9 @@ class _GreetingCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Es un nuevo día.',
-          style: TextStyle(
+        Text(
+          isNight ? 'Es una gran noche.' : 'Es un nuevo día.',
+          style: const TextStyle(
             fontFamily: AppTheme.fontFamily,
             fontWeight: FontWeight.w500,
             fontSize: 14,
