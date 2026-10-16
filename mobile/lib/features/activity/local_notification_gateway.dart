@@ -15,7 +15,7 @@ class LocalNotificationGateway implements NotificationGateway {
   static const _channel = AndroidNotificationDetails(
     'task_reminders',
     'Recordatorios de tareas',
-    channelDescription: 'Avisos diarios de las tareas que elegiste.',
+    channelDescription: 'Avisos de las tareas que elegiste.',
   );
 
   /// The scheduled times are read in the phone's own timezone.
@@ -47,26 +47,22 @@ class LocalNotificationGateway implements NotificationGateway {
   Future<void> cancelAll() => _plugin.cancelAll();
 
   @override
-  Future<void> scheduleDaily({
+  Future<void> scheduleAt({
     required int id,
     required String title,
     required String body,
-    required int hour,
-    required int minute,
+    required DateTime when,
   }) async {
     await _ensureReady();
-    final now = tz.TZDateTime.now(tz.local);
-    var next = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
-    if (!next.isAfter(now)) next = next.add(const Duration(days: 1));
+    final date = tz.TZDateTime(tz.local, when.year, when.month, when.day, when.hour, when.minute);
 
     await _plugin.zonedSchedule(
       id: id,
       title: title,
       body: body,
-      scheduledDate: next,
+      scheduledDate: date,
       notificationDetails: const NotificationDetails(android: _channel),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 }

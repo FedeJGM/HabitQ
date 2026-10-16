@@ -1,13 +1,15 @@
 import 'package:mobile/features/activity/reminder_service.dart';
 
 class ScheduledCall {
-  ScheduledCall(this.id, this.title, this.body, this.hour, this.minute);
+  ScheduledCall(this.id, this.title, this.body, this.when);
 
   final int id;
   final String title;
   final String body;
-  final int hour;
-  final int minute;
+  final DateTime when;
+
+  int get hour => when.hour;
+  int get minute => when.minute;
 }
 
 class FakeNotificationGateway implements NotificationGateway {
@@ -43,15 +45,14 @@ class FakeNotificationGateway implements NotificationGateway {
   }
 
   @override
-  Future<void> scheduleDaily({
+  Future<void> scheduleAt({
     required int id,
     required String title,
     required String body,
-    required int hour,
-    required int minute,
+    required DateTime when,
   }) async {
     order.add('schedule');
     if (failWith != null) throw failWith!;
-    scheduled.add(ScheduledCall(id, title, body, hour, minute));
+    scheduled.add(ScheduledCall(id, title, body, when));
   }
 }

@@ -127,7 +127,7 @@ void main() {
         home: ActivityScreen(
           tasksService: service,
           authService: _FakeAuthService(),
-          reminderService: ReminderService(gateway: gateway),
+          reminderService: ReminderService(gateway: gateway, now: () => now),
           now: () => now,
         ),
       ),
@@ -502,7 +502,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(service.reminders, ['08:00']);
-      expect(inCard('t1', find.text('08:00')), findsOneWidget);
+      expect(inCard('t1', find.text('8:00 AM')), findsOneWidget);
     });
 
     testWidgets('a task with a reminder shows its time and lets you remove it', (tester) async {
@@ -511,13 +511,13 @@ void main() {
       });
       await pumpScreen(tester, service);
 
-      expect(inCard('t1', find.text('07:30')), findsOneWidget);
+      expect(inCard('t1', find.text('7:30 AM')), findsOneWidget);
 
       await tester.tap(inCard('t1', find.byTooltip('Quitar recordatorio')));
       await tester.pumpAndSettle();
 
       expect(service.reminders, [null]);
-      expect(inCard('t1', find.text('07:30')), findsNothing);
+      expect(inCard('t1', find.text('7:30 AM')), findsNothing);
     });
 
     testWidgets('reminders cannot be edited on a past day', (tester) async {
@@ -535,6 +535,20 @@ void main() {
   });
 
   group('reminder notifications', () {
+    testWidgets('the card shows the reminder with AM or PM so mornings and nights differ', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [
+          _task('t1', 'sleep_a', 'Apagar pantallas', reminder: '23:29'),
+          _task('t2', 'sleep_b', 'Rutina tranquila', reminder: '11:32'),
+        ],
+      });
+
+      await pumpScreen(tester, service);
+
+      expect(inCard('t1', find.text('11:29 PM')), findsOneWidget);
+      expect(inCard('t2', find.text('11:32 AM')), findsOneWidget);
+    });
+
     testWidgets('opening today schedules the reminders the tasks already have', (tester) async {
       final service = _FakeTasksService(byDay: {
         dayKey: [
@@ -545,9 +559,79 @@ void main() {
 
       await pumpScreen(tester, service);
 
-      expect(gateway.order, ['cancelPending', 'schedule']);
-      expect(gateway.scheduled.single.body, 'Recordatorio: Desayunar');
-      expect((gateway.scheduled.single.hour, gateway.scheduled.single.minute), (7, 30));
+      expect(gateway.order.first, 'cancelPending');
+      expect(gateway.scheduled, hasLength(6));
+      expect(gateway.scheduled.first.when, DateTime(2026, 10, 16, 7, 30));
+      expect(gateway.scheduled.first.body, 'Recordatorio: Desayunar');
+    });
+
+    testWidgets('a task done today does not remind today', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar', reminder: '11:00', progress: 1)],
+      });
+
+      await pumpScreen(tester, service);
+
+      expect(gateway.scheduled.first.when, DateTime(2026, 10, 16, 11));
+      expect(gateway.scheduled, hasLength(6));
+    });
+
+    testWidgets('ticking a task takes today\'s reminder off the schedule', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar', reminder: '11:00')],
+      });
+      await pumpScreen(tester, service);
+      expect(gateway.scheduled.first.when, DateTime(2026, 10, 15, 11));
+      gateway.scheduled.clear();
+
+      await tester.tap(inCard('t1', find.byType(Checkbox)));
+      await tester.pumpAndSettle();
+
+      expect(gateway.scheduled.any((c) => c.when.day == 15), isFalse);
+      expect(gateway.scheduled, hasLength(6));
+    });
+
+    testWidgets('unticking a task puts today\'s reminder back', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar', reminder: '11:00', progress: 1)],
+      });
+      await pumpScreen(tester, service);
+      gateway.scheduled.clear();
+
+      await tester.tap(inCard('t1', find.byType(Checkbox)));
+      await tester.pumpAndSettle();
+
+      expect(gateway.scheduled.first.when, DateTime(2026, 10, 15, 11));
+    });
+
+    testWidgets('a counter that stays below its target leaves the schedule alone', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [
+          _task('t1', 'hydrate_water', 'Tomar agua', target: 8, unit: 'vasos', progress: 2, reminder: '11:00'),
+        ],
+      });
+      await pumpScreen(tester, service);
+      gateway.order.clear();
+
+      await tester.tap(inCard('t1', find.byTooltip('Sumar')));
+      await tester.pumpAndSettle();
+
+      expect(gateway.order, isEmpty);
+    });
+
+    testWidgets('reaching a counter\'s target takes today\'s reminder off', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [
+          _task('t1', 'hydrate_water', 'Tomar agua', target: 8, unit: 'vasos', progress: 7, reminder: '11:00'),
+        ],
+      });
+      await pumpScreen(tester, service);
+      gateway.scheduled.clear();
+
+      await tester.tap(inCard('t1', find.byTooltip('Sumar')));
+      await tester.pumpAndSettle();
+
+      expect(gateway.scheduled.any((c) => c.when.day == 15), isFalse);
     });
 
     testWidgets('looking at a past day does not touch the schedule', (tester) async {

@@ -151,6 +151,8 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       final updated = await _service.setProgress(task.id, _selected, next);
       if (!mounted) return;
       _replace(updated);
+      // Today's reminder depends on whether the task is done.
+      if (updated.completed != task.completed) _syncReminders();
     } on ApiException catch (e) {
       if (!mounted) return;
       _showError(e.message);
@@ -446,7 +448,8 @@ class _TaskCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                if (reminder != null) Text(reminder, style: _subtitleStyle),
+                if (reminder != null)
+                  Text(_parseReminder(reminder)?.format(context) ?? reminder, style: _subtitleStyle),
                 if (editable)
                   IconButton(
                     tooltip: 'Recordatorio',

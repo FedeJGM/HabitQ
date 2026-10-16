@@ -16,24 +16,38 @@ abstract class NotificationGateway {
   /// Removes everything: pending reminders and notifications already shown.
   Future<void> cancelAll();
 
-  /// A notification that repeats every day at [hour]:[minute] local time.
-  Future<void> scheduleDaily({
+  /// A one-time notification at [when] (the phone's local time).
+  Future<void> scheduleAt({
     required int id,
     required String title,
     required String body,
-    required int hour,
-    required int minute,
+    required DateTime when,
   });
 }
 
-/// Keeps the phone's daily reminders in line with the user's tasks. They are
-/// plain local notifications at the time the user picked (D-25): no server and
+/// Keeps the phone's reminders in line with the user's tasks. They are plain
+/// local notifications at the time the user picked (D-25): no server and
 /// nothing that decides when to notify. Failures never reach the UI: a task
 /// works the same without its reminder.
+///
+/// Each reminder is scheduled as a separate notification for each of the next
+/// [windowDays] days, not as one repeating alarm, so that today's can be left
+/// out when the task is already done. The window is refreshed every time the
+/// app syncs.
 class ReminderService {
-  ReminderService({NotificationGateway? gateway}) : _gateway = gateway ?? LocalNotificationGateway();
+  ReminderService({NotificationGateway? gateway, DateTime Function()? now})
+      : _gateway = gateway ?? LocalNotificationGateway(),
+        _now = now ?? DateTime.now;
+
+  /// Today plus the next six days.
+  static const windowDays = 7;
+
+  // 28 bits of the task id, shifted left 3 to leave room for the day offset
+  // (0 to 7): the result always fits in a positive 32-bit notification id.
+  static const _baseMask = 0xFFFFFFF;
 
   final NotificationGateway _gateway;
+  final DateTime Function() _now;
 
   Future<bool> requestPermission() async {
     try {
@@ -44,28 +58,36 @@ class ReminderService {
     }
   }
 
-  /// Replaces every pending reminder with the ones in [tasks]. Only the pending
-  /// ones are cleared: a reminder that already fired keeps its notification
-  /// until the user dismisses it, and a task keeps the same notification id so a
-  /// new reminder never replaces another task's.
+  /// Replaces every pending reminder with the ones for [tasks], which must be
+  /// today's list. Only the pending ones are cleared: a reminder that already
+  /// fired keeps its notification until the user dismisses it. A task that is
+  /// done today skips only today's reminder.
   Future<void> sync(List<DayTask> tasks) async {
     try {
       await _gateway.cancelPending();
-      final used = <int>{};
+      final now = _now();
+      final usedBases = <int>{};
       for (final task in tasks) {
         final time = _parse(task.reminderTime);
         if (time == null) continue;
-        var id = notificationId(task.id);
-        while (!used.add(id)) {
-          id = (id + 1) & 0x7fffffff;
+
+        var base = _baseId(task.id);
+        while (!usedBases.add(base)) {
+          base = (base + 1) & _baseMask;
+          if (base == 0) base = 1;
         }
-        await _gateway.scheduleDaily(
-          id: id,
-          title: 'HabitQ',
-          body: 'Recordatorio: ${task.label}',
-          hour: time.$1,
-          minute: time.$2,
-        );
+
+        for (var offset = 0; offset < windowDays; offset++) {
+          if (offset == 0 && task.completed) continue;
+          final when = DateTime(now.year, now.month, now.day + offset, time.$1, time.$2);
+          if (!when.isAfter(now)) continue;
+          await _gateway.scheduleAt(
+            id: (base << 3) | offset,
+            title: 'HabitQ',
+            body: 'Recordatorio: ${task.label}',
+            when: when,
+          );
+        }
       }
     } catch (error) {
       debugPrint('Reminder sync failed: $error');
@@ -80,16 +102,19 @@ class ReminderService {
     }
   }
 
-  /// A stable positive 31-bit id taken from the task id (a UUID), so it does
-  /// not depend on where the task sits in the list.
-  static int notificationId(String taskId) {
+  /// A stable positive 31-bit id for one task on one day of the window, taken
+  /// from the task id (a UUID) so it does not depend on the task's position.
+  static int notificationId(String taskId, [int dayOffset = 0]) =>
+      (_baseId(taskId) << 3) | dayOffset;
+
+  static int _baseId(String taskId) {
     final hex = taskId.replaceAll('-', '');
     final head = hex.length >= 7 ? hex.substring(0, 7) : hex;
     final parsed = int.tryParse(head, radix: 16);
     if (parsed != null) return parsed == 0 ? 1 : parsed;
     var hash = 17;
     for (final unit in taskId.codeUnits) {
-      hash = (hash * 31 + unit) & 0x7fffffff;
+      hash = (hash * 31 + unit) & _baseMask;
     }
     return hash == 0 ? 1 : hash;
   }
