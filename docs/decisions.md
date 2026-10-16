@@ -352,3 +352,26 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Limitaciones conocidas:**
 - El chat **no envía el historial** de la conversación al modelo: cada pregunta se arma con la pregunta, los fragmentos recuperados y el contexto del usuario (`llm_service.build_prompt`). El historial solo se guarda y se muestra en la app.
 - Si el nombre del modelo dejara de existir (404), se revierte el cambio (`ee122b2`) o se elige otro con `client.models.list()` (D-14).
+
+
+---
+
+## D-27 — Pruebas en celular por Tailscale en lugar de cable USB (`adb reverse`)
+
+**Contexto:** probar en un celular físico exigía el cable USB y `adb reverse` activo cada vez, lo que estorbaba al equipo de dos personas. La presentación será en una sola tarde de noviembre de 2026 (fecha por confirmar) y podría durar 4 horas o más.
+
+**Decisión (2026-10-16):** el backend y PostgreSQL siguen corriendo en la PC con `docker compose up -d`, y los celulares los alcanzan por la red privada de Tailscale (cuenta gratuita). El APK se compila una vez con `API_BASE_URL=http://<IP de Tailscale de la PC>:8000`; el cable solo se usa, si se quiere, para instalar el APK. El procedimiento detallado se mantiene en una guía local no versionada (`GUIA_PRUEBA_HABITQ_CELULAR.txt`, sección 14); lo esencial está resumido en esta entrada.
+
+**Alternativas descartadas:**
+- *Despliegue en la nube* (Hetzner, Fly.io, Railway, Render): independiente de cualquier PC y con URL estable, pero cuesta dinero y el backend necesita **al menos 1 GB de RAM, mejor 2 GB** (medido: ~120 MB en reposo, ~900 MB con el modelo de embeddings cargado, pico ~1,7 GB; el modelo se carga en la primera pregunta del chat). Los planes gratuitos de 512 MB no alcanzan. Queda como plan si el presupuesto lo permite antes de la presentación.
+- *Cloudflare Tunnel / ngrok:* la URL estable exige comprar un dominio; con la gratuita cambia en cada ejecución y obligaría a recompilar el APK.
+
+**Limitaciones conocidas:**
+- Solo funciona en celulares con la app de Tailscale instalada y con sesión iniciada (la PC se comparte con la cuenta del compañero desde *Machines → Share*). Un tercero, como el jurado, no podría probar la app.
+- La PC debe estar encendida, sin suspenderse y con Docker corriendo durante toda la demostración, y depende del internet del lugar.
+- El APK queda atado a la IP de Tailscale de la PC; si cambia, hay que recompilarlo.
+- Hay que usar builds **debug**: el permiso `INTERNET` solo está declarado en los manifests de debug y profile, no en el principal.
+- La imagen Docker del backend debe reconstruirse (`docker compose up -d --build backend`) cuando cambia el código; una imagen vieja dejó sin rutas `/tasks` ("Not Found" en Actividad).
+- Un volumen de Docker nuevo arranca vacío: los datos de un PostgreSQL local hay que copiarlos (`pg_dump` → `psql`) o volver a ingerir los PDFs.
+
+**Plan B para la presentación:** `adb reverse` por cable (guía local, secciones 1 a 7), y enviar una pregunta de calentamiento al chat antes de empezar para que el modelo ya esté cargado.
