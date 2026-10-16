@@ -3,8 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/app_routes.dart';
 import 'package:mobile/core/networking/api_client.dart';
 import 'package:mobile/features/activity/activity_screen.dart';
+import 'package:mobile/features/activity/reminder_service.dart';
 import 'package:mobile/features/activity/tasks_service.dart';
 import 'package:mobile/features/auth/auth_service.dart';
+
+import 'fake_notification_gateway.dart';
 
 DayTask _task(
   String id,
@@ -104,8 +107,12 @@ class _FakeAuthService extends AuthService {
 void main() {
   // Thursday 2026-10-15: its Sunday-first week runs from Sun 11 to Sat 17.
   var now = DateTime(2026, 10, 15, 10);
+  late FakeNotificationGateway gateway;
 
-  setUp(() => now = DateTime(2026, 10, 15, 10));
+  setUp(() {
+    now = DateTime(2026, 10, 15, 10);
+    gateway = FakeNotificationGateway();
+  });
 
   Future<void> pumpScreen(WidgetTester tester, _FakeTasksService service) async {
     tester.view.physicalSize = const Size(800, 1800);
@@ -118,6 +125,7 @@ void main() {
         home: ActivityScreen(
           tasksService: service,
           authService: _FakeAuthService(),
+          reminderService: ReminderService(gateway: gateway),
           now: () => now,
         ),
       ),
@@ -449,6 +457,98 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byTooltip('Recordatorio'), findsNothing);
+    });
+  });
+
+  group('reminder notifications', () {
+    testWidgets('opening today schedules the reminders the tasks already have', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [
+          _task('t1', 'eat_breakfast', 'Desayunar', reminder: '07:30'),
+          _task('t2', 'move_stairs', 'Usar las escaleras'),
+        ],
+      });
+
+      await pumpScreen(tester, service);
+
+      expect(gateway.order, ['cancel', 'schedule']);
+      expect(gateway.scheduled.single.body, 'Recordatorio: Desayunar');
+      expect((gateway.scheduled.single.hour, gateway.scheduled.single.minute), (7, 30));
+    });
+
+    testWidgets('looking at a past day does not touch the schedule', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar', reminder: '07:30')],
+        '2026-10-14': [_task('t1', 'eat_breakfast', 'Desayunar')],
+      });
+      await pumpScreen(tester, service);
+      final before = List.of(gateway.order);
+
+      await tester.tap(find.byKey(const ValueKey('day-2026-10-14')));
+      await tester.pumpAndSettle();
+
+      expect(gateway.order, before);
+    });
+
+    testWidgets('picking a time asks for permission and schedules it', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar')],
+      });
+      await pumpScreen(tester, service);
+
+      await tester.tap(inCard('t1', find.byTooltip('Recordatorio')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.permissionRequests, 1);
+      expect(gateway.scheduled.last.body, 'Recordatorio: Desayunar');
+      expect((gateway.scheduled.last.hour, gateway.scheduled.last.minute), (8, 0));
+    });
+
+    testWidgets('without permission the reminder is saved and the user is told', (tester) async {
+      gateway.permissionGranted = false;
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar')],
+      });
+      await pumpScreen(tester, service);
+
+      await tester.tap(inCard('t1', find.byTooltip('Recordatorio')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      expect(service.reminders, ['08:00']);
+      expect(find.textContaining('notificaciones'), findsOneWidget);
+    });
+
+    testWidgets('removing a reminder clears the schedule', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar', reminder: '07:30')],
+      });
+      await pumpScreen(tester, service);
+      gateway.scheduled.clear();
+      gateway.order.clear();
+
+      await tester.tap(inCard('t1', find.byTooltip('Quitar recordatorio')));
+      await tester.pumpAndSettle();
+
+      expect(gateway.order, ['cancel']);
+      expect(gateway.scheduled, isEmpty);
+    });
+
+    testWidgets('signing out clears every reminder', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar', reminder: '07:30')],
+      });
+      await pumpScreen(tester, service);
+      gateway.cancelAllCalls = 0;
+
+      await tester.tap(find.byIcon(Icons.logout));
+      await tester.pumpAndSettle();
+
+      expect(gateway.cancelAllCalls, 1);
+      expect(find.text('Login'), findsOneWidget);
     });
   });
 

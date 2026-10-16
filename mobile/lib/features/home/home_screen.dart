@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../activity/reminder_service.dart';
 import '../auth/auth_service.dart';
 import '../chat/chat_service.dart';
 import '../../core/widgets/habitq_bottom_nav.dart';
@@ -82,6 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handleSignOut() async {
+    await ReminderService().cancelAll();
     await _authService.signOut();
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);

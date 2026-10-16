@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/networking/api_client.dart';
@@ -6,6 +8,7 @@ import '../../core/widgets/habitq_bottom_nav.dart';
 import '../../core/widgets/habitq_card.dart';
 import '../../core/widgets/habitq_shell.dart';
 import '../auth/auth_service.dart';
+import 'reminder_service.dart';
 import 'tasks_service.dart';
 
 const _months = [
@@ -34,10 +37,17 @@ TimeOfDay? _parseReminder(String? time) {
 /// editable and past days are read-only. The day restarts at the user's local
 /// midnight: the screen reloads when the app is resumed on a new date.
 class ActivityScreen extends StatefulWidget {
-  const ActivityScreen({super.key, this.tasksService, this.authService, this.now});
+  const ActivityScreen({
+    super.key,
+    this.tasksService,
+    this.authService,
+    this.reminderService,
+    this.now,
+  });
 
   final TasksService? tasksService;
   final AuthService? authService;
+  final ReminderService? reminderService;
 
   /// Clock used to find today; injectable so tests can fix the date.
   final DateTime Function()? now;
@@ -48,6 +58,7 @@ class ActivityScreen extends StatefulWidget {
 
 class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObserver {
   late final TasksService _service;
+  late final ReminderService _reminders;
   late DateTime _today;
   late DateTime _selected;
   List<DayTask> _tasks = [];
@@ -64,6 +75,7 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
   void initState() {
     super.initState();
     _service = widget.tasksService ?? TasksService();
+    _reminders = widget.reminderService ?? ReminderService();
     _today = _clockToday();
     _selected = _today;
     WidgetsBinding.instance.addObserver(this);
@@ -101,6 +113,7 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
         _tasks = tasks;
         _isLoading = false;
       });
+      _syncReminders();
     } on ApiException catch (e) {
       if (!mounted || requestId != _requestId) return;
       setState(() {
@@ -108,6 +121,11 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
         _isLoading = false;
       });
     }
+  }
+
+  /// Only today's list drives the phone's reminders; a past day never does.
+  void _syncReminders() {
+    if (_isToday) unawaited(_reminders.sync(_tasks));
   }
 
   void _selectDay(DateTime day) {
@@ -151,6 +169,14 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       await _service.setReminder(task.id, value);
       if (!mounted) return;
       _replace(task.copyWith(reminderTime: value));
+      final granted = await _reminders.requestPermission();
+      if (!mounted) return;
+      if (!granted) {
+        _showError(
+          'Activa las notificaciones de HabitQ en los ajustes del teléfono para recibir el recordatorio.',
+        );
+      }
+      _syncReminders();
     } on ApiException catch (e) {
       if (!mounted) return;
       _showError(e.message);
@@ -162,6 +188,7 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       await _service.setReminder(task.id, null);
       if (!mounted) return;
       _replace(task.copyWith(clearReminder: true));
+      _syncReminders();
     } on ApiException catch (e) {
       if (!mounted) return;
       _showError(e.message);
@@ -182,7 +209,7 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
   Widget build(BuildContext context) {
     return HabitQShell(
       currentTab: HabitQTab.activity,
-      onLogout: () => signOutAndGoToLogin(context, widget.authService),
+      onLogout: () => signOutAndGoToLogin(context, widget.authService, _reminders),
       child: Stack(
         children: [
           ListView(
