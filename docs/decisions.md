@@ -267,3 +267,55 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Eliminación:** `document_chunks` no tiene `ON DELETE CASCADE`, así que se borran primero los chunks y luego el documento, todo en una transacción. El candidato `ingested` con el mismo DOI (sin distinguir mayúsculas) pasa a `rejected`, de modo que el descubrimiento no lo proponga de nuevo (D-17). El PDF se conserva en disco. No se agregó migración.
 
 **Limitación conocida:** `messages.sources` guarda un snapshot de texto, no una FK (D-18), por lo que los mensajes de chat anteriores siguen mostrando la referencia de un documento ya eliminado.
+
+
+---
+
+## D-23 — Excepción al alcance y al freeze: checklist diario por objetivo
+
+**Contexto:** el plan dejaba fuera "Tareas diarias automáticas" y fijaba el 11 de octubre como cierre de funcionalidades. El diseño Figma incluye una pantalla **Actividad** (`Diseño/Actividad.png`: franja semanal, tareas con casilla, contadores como «Tomar agua 2/8» y recordatorios) que el rediseño de la app descartó porque el backend no tenía tareas. `Diseño/Inicio.png` no contiene ninguna lista de tareas.
+
+**Decisión (2026-10-15):** se reabre el alcance, con aprobación explícita de la persona responsable del proyecto, para un checklist diario ligado al objetivo principal del perfil:
+- Nueva pestaña **Actividad** (barra: Inicio / Actividad / Chat / Perfil).
+- La persona elige, de un catálogo fijo por cada uno de los 6 objetivos (D-06), qué tareas activar. Sin texto libre.
+- Cada tarea tiene una meta (1 = casilla; N = contador) y progreso por día.
+- La lista de hoy parte en cero a la medianoche del propio usuario; la franja semanal permite ver días pasados en solo lectura (D-24).
+- Recordatorio local opcional por tarea (D-25).
+
+**Sigue fuera del MVP:** tareas generadas automáticamente, notificaciones inteligentes (push o decididas por el servidor), gamificación, logros y puntos, seguimiento por GPS (la barra de progreso en kilómetros es un contador manual) y cualquier diagnóstico o tratamiento. Las tareas son hábitos de comportamiento, no indicaciones médicas.
+
+**Alternativas descartadas:** (a) dejarlo como mejora posterior al MVP: la persona responsable prefirió incluirlo; (b) mostrar la lista dentro de Inicio: se eligió la pestaña Actividad por fidelidad al Figma; (c) tareas libres escritas por la persona usuaria: abre texto libre y validación de contenido.
+
+**Riesgo asumido:** la regla 5 de la sección 20 y la nota del 11 de octubre quedan con esta excepción documentada. Si el calendario se aprieta, el orden de recorte es: recordatorios, franja semanal, contadores.
+
+---
+
+## D-24 — Modelo de tareas, catálogo servido por la API y día por fecha local
+
+**Contexto:** el backend guarda todas las marcas de tiempo en UTC y no tiene fechas ni zona horaria por usuario. El reinicio «después de medianoche» debe ocurrir en la medianoche de cada persona.
+
+**Decisión (2026-10-15):**
+- **Catálogo en código** (`backend/app/services/task_catalog.py`), no en tabla: por objetivo, una lista de `{key, label, target, unit}`. Lo sirve `GET /tasks/catalog` según `profile.main_goal`, de modo que la app no duplica los textos.
+- **Dos tablas** (migración `0009`): `daily_tasks` (tareas activadas por la persona: `task_key`, `target`, `reminder_time`, `archived_at`) y `task_progress` (`task_id`, `day DATE`, `progress`, único por `(task_id, day)`). Una tarea queda completada cuando `progress >= target`.
+- **Día por fecha local:** la app envía `day=YYYY-MM-DD` con la fecha de su celular y el servidor guarda por esa fecha. No se agrega zona horaria al perfil.
+- **Acotación en el servidor:** `day` solo se acepta dentro de ±1 día de la fecha UTC del servidor, lo que cubre cualquier huso horario sin que el servidor lo conozca.
+- **Días pasados:** se consultan, pero solo «hoy» es editable; lo hace cumplir la app.
+- **Quitar una tarea** la archiva (`archived_at`) y conserva su historial.
+
+**Alternativas descartadas:** (a) campo de zona horaria en el perfil: más piezas y más datos personales para el mismo resultado; (b) catálogo en tabla con panel de administración: sin necesidad en el MVP, un cambio de catálogo es un cambio de código revisado.
+
+**Limitación conocida:** un celular con la hora mal configurada escribe en otro día, dentro del margen de ±1 día. No se detecta ni corrige.
+
+---
+
+## D-25 — Recordatorios locales de tareas
+
+**Contexto:** el plan excluye «Notificaciones inteligentes». El diseño de Actividad muestra un reloj de recordatorio por tarea y la persona responsable pidió incluirlo.
+
+**Decisión (2026-10-15):** el recordatorio es una **notificación local** programada en el celular a la hora que la persona elige (`daily_tasks.reminder_time`), repetida a diario. No hay servidor de notificaciones, ni envío push, ni lógica que decida cuándo avisar. Al abrir la app se reprograman a partir de `GET /tasks`. El texto es neutro y solo nombra la tarea. En Android 13 o superior se solicita el permiso de notificaciones y, si se rechaza, la tarea funciona sin recordatorio.
+
+**Por qué no contradice la exclusión:** lo excluido son las notificaciones *inteligentes* (decididas por el sistema). Aquí la persona fija la hora y el aviso es fijo.
+
+**Alternativas descartadas:** push desde el servidor (requiere servicio externo y credenciales, fuera del alcance).
+
+**Limitación conocida:** Android puede retrasar las notificaciones por ahorro de batería; no se promete una hora exacta.
