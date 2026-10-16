@@ -185,6 +185,21 @@ void main() {
     });
   });
 
+  group('DayTask archived flag', () {
+    test('defaults to false and reads the backend flag', () {
+      expect(DayTask.fromJson(_taskJson(progress: 1, completed: false)).archived, isFalse);
+
+      final json = _taskJson(progress: 1, completed: false)..['archived'] = true;
+      expect(DayTask.fromJson(json).archived, isTrue);
+    });
+
+    test('copyWith keeps it', () {
+      final json = _taskJson(progress: 1, completed: false)..['archived'] = true;
+
+      expect(DayTask.fromJson(json).copyWith(progress: 2).archived, isTrue);
+    });
+  });
+
   group('DayTask', () {
     test('copyWith changes only the progress and recomputes completion', () {
       final task = DayTask.fromJson(_taskJson(progress: 2, completed: false));

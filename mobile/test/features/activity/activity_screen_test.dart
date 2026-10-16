@@ -18,6 +18,7 @@ DayTask _task(
   int step = 1,
   int progress = 0,
   String? reminder,
+  bool archived = false,
 }) =>
     DayTask(
       id: id,
@@ -28,6 +29,7 @@ DayTask _task(
       step: step,
       progress: progress,
       reminderTime: reminder,
+      archived: archived,
     );
 
 class _FakeTasksService extends TasksService {
@@ -282,6 +284,78 @@ void main() {
     });
   });
 
+  group('removed tasks', () {
+    testWidgets('are not listed today even when they have recorded progress', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [
+          _task('t1', 'hydrate_water', 'Tomar agua', target: 8, unit: 'vasos', progress: 3, archived: true),
+          _task('t2', 'eat_breakfast', 'Desayunar'),
+        ],
+      });
+
+      await pumpScreen(tester, service);
+
+      expect(find.text('Tomar agua'), findsNothing);
+      expect(find.text('Desayunar'), findsOneWidget);
+    });
+
+    testWidgets('still show on a past day as read-only history', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [],
+        '2026-10-14': [
+          _task('t1', 'hydrate_water', 'Tomar agua', target: 8, unit: 'vasos', progress: 5, archived: true),
+        ],
+      });
+      await pumpScreen(tester, service);
+
+      await tester.tap(find.byKey(const ValueKey('day-2026-10-14')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tomar agua'), findsOneWidget);
+      expect(find.text('5/8 vasos'), findsOneWidget);
+      expect(find.byTooltip('Sumar'), findsNothing);
+    });
+
+    testWidgets('are not counted as active in the task picker', (tester) async {
+      final service = _FakeTasksService(
+        catalog: const [
+          CatalogTask(key: 'hydrate_water', label: 'Tomar agua', target: 8, unit: 'vasos', step: 1),
+        ],
+        byDay: {
+          dayKey: [
+            _task('t1', 'hydrate_water', 'Tomar agua', target: 8, unit: 'vasos', progress: 3, archived: true),
+          ],
+        },
+      );
+      await pumpScreen(tester, service);
+
+      await tester.tap(find.byTooltip('Elegir tareas'));
+      await tester.pumpAndSettle();
+
+      final tile = tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Tomar agua'));
+      expect(tile.value, isFalse);
+    });
+
+    testWidgets('the picker reads the current tasks, not a stale list', (tester) async {
+      final service = _FakeTasksService(
+        catalog: const [
+          CatalogTask(key: 'hydrate_water', label: 'Tomar agua', target: 8, unit: 'vasos', step: 1),
+        ],
+        byDay: {
+          dayKey: [_task('t1', 'hydrate_water', 'Tomar agua', target: 8, unit: 'vasos')],
+        },
+      );
+      await pumpScreen(tester, service);
+      service.byDay[dayKey]!.clear(); // removed elsewhere after the screen loaded
+
+      await tester.tap(find.byTooltip('Elegir tareas'));
+      await tester.pumpAndSettle();
+
+      final tile = tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Tomar agua'));
+      expect(tile.value, isFalse);
+    });
+  });
+
   group('week strip', () {
     testWidgets('tapping a past day loads it as read-only', (tester) async {
       final service = _FakeTasksService(byDay: {
@@ -471,7 +545,7 @@ void main() {
 
       await pumpScreen(tester, service);
 
-      expect(gateway.order, ['cancel', 'schedule']);
+      expect(gateway.order, ['cancelPending', 'schedule']);
       expect(gateway.scheduled.single.body, 'Recordatorio: Desayunar');
       expect((gateway.scheduled.single.hour, gateway.scheduled.single.minute), (7, 30));
     });
@@ -533,7 +607,7 @@ void main() {
       await tester.tap(inCard('t1', find.byTooltip('Quitar recordatorio')));
       await tester.pumpAndSettle();
 
-      expect(gateway.order, ['cancel']);
+      expect(gateway.order, ['cancelPending']);
       expect(gateway.scheduled, isEmpty);
     });
 

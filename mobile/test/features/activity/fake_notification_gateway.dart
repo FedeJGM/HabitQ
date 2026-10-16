@@ -17,6 +17,7 @@ class FakeNotificationGateway implements NotificationGateway {
   Object? failWith;
   int permissionRequests = 0;
   int cancelAllCalls = 0;
+  int cancelPendingCalls = 0;
   final List<ScheduledCall> scheduled = [];
   final List<String> order = [];
 
@@ -25,6 +26,13 @@ class FakeNotificationGateway implements NotificationGateway {
     permissionRequests++;
     if (failWith != null) throw failWith!;
     return permissionGranted;
+  }
+
+  @override
+  Future<void> cancelPending() async {
+    cancelPendingCalls++;
+    order.add('cancelPending');
+    if (failWith != null) throw failWith!;
   }
 
   @override

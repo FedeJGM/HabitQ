@@ -39,6 +39,7 @@ class DayTask {
     required this.step,
     required this.progress,
     this.reminderTime,
+    this.archived = false,
   });
 
   factory DayTask.fromJson(Map<String, dynamic> json) => DayTask(
@@ -50,6 +51,7 @@ class DayTask {
         step: json['step'] as int,
         progress: (json['progress'] as int?) ?? 0,
         reminderTime: _hourMinute(json['reminder_time'] as String?),
+        archived: (json['archived'] as bool?) ?? false,
       );
 
   final String id;
@@ -60,6 +62,9 @@ class DayTask {
   final int step;
   final int progress;
   final String? reminderTime;
+
+  /// A removed task that is only listed because it has history that day.
+  final bool archived;
 
   bool get isCounter => target > 1;
   bool get completed => progress >= target;
@@ -74,6 +79,7 @@ class DayTask {
         step: step,
         progress: progress ?? this.progress,
         reminderTime: clearReminder ? null : (reminderTime ?? this.reminderTime),
+        archived: archived,
       );
 
   /// The backend returns "08:30:00"; the app works with "08:30".

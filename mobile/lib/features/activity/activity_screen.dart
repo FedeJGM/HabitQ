@@ -110,7 +110,8 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       final tasks = await _service.fetchTasks(_selected);
       if (!mounted || requestId != _requestId) return;
       setState(() {
-        _tasks = tasks;
+        // A removed task is only history: it shows on past days, never today.
+        _tasks = _isToday ? tasks.where((task) => !task.archived).toList() : tasks;
         _isLoading = false;
       });
       _syncReminders();
@@ -200,7 +201,7 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _TaskPickerSheet(service: _service, activeTasks: _tasks),
+      builder: (_) => _TaskPickerSheet(service: _service, today: _today),
     );
     if (mounted) _load();
   }
@@ -470,10 +471,10 @@ class _TaskCard extends StatelessWidget {
 
 /// Bottom sheet to switch catalog tasks on or off. Each switch saves right away.
 class _TaskPickerSheet extends StatefulWidget {
-  const _TaskPickerSheet({required this.service, required this.activeTasks});
+  const _TaskPickerSheet({required this.service, required this.today});
 
   final TasksService service;
-  final List<DayTask> activeTasks;
+  final DateTime today;
 
   @override
   State<_TaskPickerSheet> createState() => _TaskPickerSheetState();
@@ -482,21 +483,29 @@ class _TaskPickerSheet extends StatefulWidget {
 class _TaskPickerSheetState extends State<_TaskPickerSheet> {
   List<CatalogTask>? _catalog;
   String? _errorMessage;
-  late final Map<String, String> _activeIdByKey;
+  final Map<String, String> _activeIdByKey = {};
   final Set<String> _busy = {};
 
   @override
   void initState() {
     super.initState();
-    _activeIdByKey = {for (final task in widget.activeTasks) task.taskKey: task.id};
-    _loadCatalog();
+    _loadData();
   }
 
-  Future<void> _loadCatalog() async {
+  /// Reads the catalog and today's tasks fresh, so the switches never rely on
+  /// a list the screen may have left behind.
+  Future<void> _loadData() async {
     try {
       final catalog = await widget.service.fetchCatalog();
+      final tasks = await widget.service.fetchTasks(widget.today);
       if (!mounted) return;
-      setState(() => _catalog = catalog);
+      setState(() {
+        _activeIdByKey.addAll({
+          for (final task in tasks)
+            if (!task.archived) task.taskKey: task.id,
+        });
+        _catalog = catalog;
+      });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _errorMessage = e.message);

@@ -9,6 +9,11 @@ abstract class NotificationGateway {
   /// Asks for the notification permission (Android 13+). True when granted.
   Future<bool> requestPermission();
 
+  /// Removes the reminders still waiting to fire. Notifications already shown
+  /// in the tray stay there.
+  Future<void> cancelPending();
+
+  /// Removes everything: pending reminders and notifications already shown.
   Future<void> cancelAll();
 
   /// A notification that repeats every day at [hour]:[minute] local time.
@@ -39,17 +44,23 @@ class ReminderService {
     }
   }
 
-  /// Replaces every scheduled reminder with the ones in [tasks]. Rescheduling
-  /// everything keeps removed tasks from leaving a stale notification behind.
+  /// Replaces every pending reminder with the ones in [tasks]. Only the pending
+  /// ones are cleared: a reminder that already fired keeps its notification
+  /// until the user dismisses it, and a task keeps the same notification id so a
+  /// new reminder never replaces another task's.
   Future<void> sync(List<DayTask> tasks) async {
     try {
-      await _gateway.cancelAll();
-      var id = 0;
+      await _gateway.cancelPending();
+      final used = <int>{};
       for (final task in tasks) {
         final time = _parse(task.reminderTime);
         if (time == null) continue;
+        var id = notificationId(task.id);
+        while (!used.add(id)) {
+          id = (id + 1) & 0x7fffffff;
+        }
         await _gateway.scheduleDaily(
-          id: ++id,
+          id: id,
           title: 'HabitQ',
           body: 'Recordatorio: ${task.label}',
           hour: time.$1,
@@ -67,6 +78,20 @@ class ReminderService {
     } catch (error) {
       debugPrint('Reminder cancel failed: $error');
     }
+  }
+
+  /// A stable positive 31-bit id taken from the task id (a UUID), so it does
+  /// not depend on where the task sits in the list.
+  static int notificationId(String taskId) {
+    final hex = taskId.replaceAll('-', '');
+    final head = hex.length >= 7 ? hex.substring(0, 7) : hex;
+    final parsed = int.tryParse(head, radix: 16);
+    if (parsed != null) return parsed == 0 ? 1 : parsed;
+    var hash = 17;
+    for (final unit in taskId.codeUnits) {
+      hash = (hash * 31 + unit) & 0x7fffffff;
+    }
+    return hash == 0 ? 1 : hash;
   }
 
   static (int, int)? _parse(String? time) {

@@ -41,6 +41,9 @@ class LocalNotificationGateway implements NotificationGateway {
   }
 
   @override
+  Future<void> cancelPending() => _plugin.cancelAllPendingNotifications();
+
+  @override
   Future<void> cancelAll() => _plugin.cancelAll();
 
   @override
