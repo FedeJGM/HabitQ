@@ -241,6 +241,26 @@ def test_list_hides_archived_tasks_unless_they_have_progress_that_day(db, signed
     assert without_progress == []
 
 
+def test_list_hides_an_archived_task_whose_only_record_is_zero(db, signed_in) -> None:
+    # Ticking and unticking a task leaves a progress row at 0: that is not history.
+    archived = _add_task(db, signed_in, "hydrate_water", 8, archived=True)
+    _add_progress(db, archived, TODAY, 0)
+
+    assert client.get("/tasks?day=2026-10-15").json() == []
+
+
+def test_list_marks_archived_tasks_so_the_app_can_hide_them_today(db, signed_in) -> None:
+    active = _add_task(db, signed_in, "eat_breakfast", 1)
+    archived = _add_task(db, signed_in, "hydrate_water", 8, archived=True)
+    _add_progress(db, archived, TODAY, 3)
+
+    by_key = {item["task_key"]: item for item in client.get("/tasks?day=2026-10-15").json()}
+
+    assert by_key["eat_breakfast"]["archived"] is False
+    assert by_key["hydrate_water"]["archived"] is True
+    assert active.id is not None
+
+
 # --- activate -------------------------------------------------------------
 
 

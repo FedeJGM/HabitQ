@@ -40,3 +40,5 @@ class TaskOut(BaseModel):
 class TaskDayOut(TaskOut):
     progress: int
     completed: bool
+    # True for a removed task that is only listed because it has history that day.
+    archived: bool = False

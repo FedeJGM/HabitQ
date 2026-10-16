@@ -50,6 +50,7 @@ def _task_day_out(task: DailyTask, progress: int) -> TaskDayOut:
         **_task_out(task).model_dump(),
         progress=progress,
         completed=progress >= task.target,
+        archived=task.archived_at is not None,
     )
 
 

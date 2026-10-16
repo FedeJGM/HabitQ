@@ -82,7 +82,8 @@ def list_tasks_for_day(db: Session, user_id: uuid.UUID, day: date) -> list[tuple
 
     A task shows up from the day it was created (one day of slack for the user's
     local date) until it is archived; an archived task still shows on days where
-    it has recorded progress, so the history stays readable."""
+    it has real progress (above zero), so the history stays readable. A zero is
+    just a ticked-then-unticked task, not history."""
     tasks = (
         db.query(DailyTask)
         .filter(DailyTask.user_id == user_id)
@@ -106,6 +107,6 @@ def list_tasks_for_day(db: Session, user_id: uuid.UUID, day: date) -> list[tuple
         if task.archived_at is None:
             if existed or has_progress:
                 visible.append((task, progress_by_task.get(task.id, 0)))
-        elif has_progress:
+        elif progress_by_task.get(task.id, 0) > 0:
             visible.append((task, progress_by_task[task.id]))
     return visible
