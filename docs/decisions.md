@@ -76,6 +76,8 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Consecuencias:** cualquier otro mockup en `Diseño/` debe revisarse con el mismo criterio antes de implementarlo — puede reflejar una exploración visual anterior al recorte de alcance del MVP.
 
+**Actualización (2026-10-15):** la pestaña «Actividad» del mockup se implementó después, limitada a un checklist diario y sin gamificación ni estadísticas (D-23). Lo demás de esta decisión sigue vigente.
+
 ---
 
 ## D-08 — Consentimiento inicial: persistencia local, no en backend
@@ -160,6 +162,8 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Cómo verificar el modelo correcto en el futuro** (si `gemini-flash-latest` alguna vez deja de existir): `client.models.list()` filtrando por `'generateContent' in m.supported_actions` devuelve los modelos realmente disponibles para esa API key — más confiable que cualquier nombre hardcodeado en documentación o en este archivo.
 
+**Actualización (2026-10-15): reemplazada por D-26.** El código ya no usa el alias: `_MODEL` quedó fijo en `gemini-3.5-flash-lite`. Lo de arriba se conserva como historia y el método de verificación con `client.models.list()` sigue siendo válido.
+
 ---
 
 ## D-15 — Personalización con perfil/hábitos: el LLM decide la relevancia, no se clasifica programáticamente
@@ -168,7 +172,7 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Decisión:** mismo criterio ya usado con el contexto de RAG (ver D-14 y `llm_service._SYSTEM_INSTRUCTIONS`): `chat_service.send_message` siempre arma el `user_context` (perfil + hábitos del usuario, si existen — `build_user_context`) y se lo pasa a `generate_answer`, pero la instrucción explícita al modelo es usarlo *solo si es relevante para la pregunta* y no mencionarlo si no viene al caso. No hay clasificación previa de relevancia en el backend.
 
-**Formato del contexto:** texto simple, sin humanizar los códigos de `habit_records` (`domain`/`key`/`value`, ej. `sleep.hours: 5_6`) — esa tabla de humanización (a texto legible en español) solo existe en `mobile/lib/features/habits/habit_questions.dart`, no se replicó en el backend para evitar duplicar la fuente de verdad.
+**Formato del contexto:** texto simple, sin humanizar los códigos de `habit_records` (`domain`/`key`/`value`, ej. `sleep.hours: 5_6`) — esa tabla de humanización (a texto legible en español) solo existe en `mobile/lib/features/habits/habit_questions.dart`, no se replicó en el backend para evitar duplicar la fuente de verdad. **Actualización (2026-10-15): reemplazado por D-26:** desde entonces el backend sí traduce los códigos a español (`user_context_labels.py`), aceptando la duplicación.
 
 **Verificado con una llamada real:** con un usuario real (perfil `18-24`/`sleep_better`, 9 hábitos cargados) y la pregunta "¿Qué puedo hacer para dormir mejor?", Gemini referenció correctamente el hábito `sleep.hours=5_6` en la respuesta ("tus registros indican que estás durmiendo entre 5 y 6 horas"), mientras seguía admitiendo honestamente que el contexto RAG recuperado (un documento de la OMS sobre actividad física, no de sueño) no tenía evidencia específica — mismo comportamiento de no inventar ya validado en D-14.
 
@@ -282,7 +286,7 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 - La lista de hoy parte en cero a la medianoche del propio usuario; la franja semanal permite ver días pasados en solo lectura (D-24).
 - Recordatorio local opcional por tarea (D-25).
 
-**Sigue fuera del MVP:** tareas generadas automáticamente, notificaciones inteligentes (push o decididas por el servidor), gamificación, logros y puntos, seguimiento por GPS (la barra de progreso en kilómetros es un contador manual) y cualquier diagnóstico o tratamiento. Las tareas son hábitos de comportamiento, no indicaciones médicas.
+**Sigue fuera del MVP:** tareas generadas automáticamente, notificaciones inteligentes (push o decididas por el servidor), gamificación, logros y puntos, seguimiento por GPS (la caminata se mide en minutos con un contador manual) y cualquier diagnóstico o tratamiento. Las tareas son hábitos de comportamiento, no indicaciones médicas.
 
 **Alternativas descartadas:** (a) dejarlo como mejora posterior al MVP: la persona responsable prefirió incluirlo; (b) mostrar la lista dentro de Inicio: se eligió la pestaña Actividad por fidelidad al Figma; (c) tareas libres escritas por la persona usuaria: abre texto libre y validación de contenido.
 
@@ -328,3 +332,23 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 - Los recordatorios se refrescan al abrir Actividad: si la persona no abre la app en más de 7 días, dejan de llegar hasta que la abra.
 - Un aviso que Android alcanzara a retrasar y que aún no se hubiera mostrado se cancelaría si la sincronización corre justo entonces.
 - No hay recordatorios en un día pasado ni se programa nada para tareas sin hora.
+
+
+---
+
+## D-26 — Modelo de chat fijado a `gemini-3.5-flash-lite` y contexto del usuario en español
+
+**Contexto:** el chat pasó del tier gratuito de Gemini a pago por uso. La app solo lee `GEMINI_API_KEY` (`backend/app/core/config.py`): que sea gratuita o de pago es un asunto de facturación del proyecto de Google (se activa en Google AI Studio), sin cambio de código. El alias `gemini-flash-latest` (D-14) puede apuntar a otro modelo, con otro precio, sin avisar. Además el contexto del usuario llegaba al modelo con códigos crudos (`sleep.hours: 5_6`), ambiguos sin la pregunta que respondían (D-15).
+
+**Decisión (2026-10-15):**
+- `llm_service._MODEL = "gemini-3.5-flash-lite"`, fijo. Reemplaza el alias de D-14.
+- `backend/app/services/user_context_labels.py` traduce a español claro el objetivo principal y cada respuesta del cuestionario de hábitos antes de enviarlas al modelo (`chat_service.build_user_context`). Un código desconocido nunca es un error: se usa el valor crudo.
+- Esto reemplaza lo que decía D-15 sobre no humanizar los códigos: las etiquetas se duplican a propósito del móvil (`habit_questions.dart`, `profile_options.dart`) a cambio de que el modelo lea texto sin ambigüedad. **Hay que mantener ambas listas sincronizadas a mano**; el módulo lo avisa en su encabezado.
+
+**Alternativas descartadas:** (a) seguir con el alias: cambios de modelo y de costo sin aviso; (b) que el móvil envíe los textos ya traducidos: el backend arma el contexto desde sus propios datos y no confía en lo que mande el cliente (D-01).
+
+**Verificado:** las pruebas del backend pasaron al hacer el cambio y el chat respondió en el celular tras reconstruir el backend. **Pendiente:** confirmar en Google AI Studio que el uso aparece bajo `gemini-3.5-flash-lite`.
+
+**Limitaciones conocidas:**
+- El chat **no envía el historial** de la conversación al modelo: cada pregunta se arma con la pregunta, los fragmentos recuperados y el contexto del usuario (`llm_service.build_prompt`). El historial solo se guarda y se muestra en la app.
+- Si el nombre del modelo dejara de existir (404), se revierte el cambio (`ee122b2`) o se elige otro con `client.models.list()` (D-14).

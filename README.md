@@ -62,7 +62,7 @@ Completa `.env` con:
 | `JWT_SECRET` | backend | Secreto para firmar el JWT HabitQ (cualquier string largo aleatorio) |
 | `GOOGLE_CLIENT_ID` | backend + mobile | **Web** Client ID de Google Cloud (ver sección "Credenciales de Google" abajo) |
 | `API_BASE_URL` | mobile | URL del backend. `http://10.0.2.2:8000` apunta al `localhost` de tu PC desde el emulador Android |
-| `GEMINI_API_KEY` | backend | API key de Gemini (`google-genai`). **Obligatoria**: el backend no arranca sin ella |
+| `GEMINI_API_KEY` | backend | API key de Gemini (`google-genai`). **Obligatoria**: el backend no arranca sin ella. El modelo está fijo en `gemini-3.5-flash-lite` (D-26); que la clave sea gratuita o de pago es un asunto de facturación del proyecto de Google, no de la app |
 | `ADMIN_EMAILS` | backend | Correos de Google (separados por coma) con acceso a `/admin`. Vacía = nadie es admin |
 | `EMBEDDING_MODEL_NAME` | backend | Opcional. Modelo de embeddings (por defecto `intfloat/multilingual-e5-small`). Si lo cambias, hay que [reindexar](#4-migraciones) |
 | `RETRIEVAL_MIN_SCORE` | backend | Opcional. Similitud mínima para usar un fragmento como evidencia; vacía = sin umbral (ver D-19) |

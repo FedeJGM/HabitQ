@@ -88,7 +88,7 @@ Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involu
 - **Flujo principal:**
   1. El usuario abre el chat desde Home: con el botón único «Chat con HabitQ» si aún no tiene conversaciones, o con «Continuar conversación» (abre la más reciente) o «Nuevo chat con HabitQ» (chat vacío) si ya tiene alguna.
   2. Escribe una pregunta y la envía (se muestra de inmediato, envío optimista).
-  3. El sistema recupera los fragmentos de evidencia más relevantes de `document_chunks` (similitud coseno, sin pgvector — ver `../decisions.md` D-12; embeddings multilingües, D-20), arma un prompt con esa evidencia y, si es relevante, el perfil/hábitos del usuario (D-15), y llama a Gemini.
+  3. El sistema recupera los fragmentos de evidencia más relevantes de `document_chunks` (similitud coseno, sin pgvector — ver `../decisions.md` D-12; embeddings multilingües, D-20), arma un prompt con esa evidencia y, si es relevante, el perfil/hábitos del usuario traducidos a español claro (D-15, D-26), y llama a Gemini con el modelo fijo `gemini-3.5-flash-lite`. El modelo no recibe el historial de la conversación, solo la pregunta actual (D-26).
   4. El sistema guarda la pregunta y la respuesta como mensajes de la conversación (nueva o existente).
   5. La app muestra la respuesta junto con un bloque «Referencias»: por cada documento usado, autores, año, título, revista, páginas y un enlace DOI tocable (o la URL de origen).
 - **Postcondición:** Si era la primera pregunta, nueva fila en `conversations`; siempre, 2 filas nuevas en `messages`. El mensaje del asistente guarda una copia de sus referencias (`messages.sources`, D-18). Si Gemini falla, no se persiste nada (ni siquiera una conversación vacía — flujo atómico).
