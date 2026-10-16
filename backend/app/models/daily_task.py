@@ -21,6 +21,7 @@ class DailyTask(Base):
             "task_key",
             unique=True,
             postgresql_where=text("archived_at IS NULL"),
+            sqlite_where=text("archived_at IS NULL"),
         ),
     )
 
