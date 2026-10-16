@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
@@ -6,11 +7,16 @@ import 'package:timezone/timezone.dart' as tz;
 import 'reminder_service.dart';
 
 /// Android implementation over flutter_local_notifications. Reminders use an
-/// inexact alarm: Android may delay them a little to save battery, and that
-/// avoids asking for the exact-alarm permission (D-25).
+/// exact alarm so they arrive at the minute the user picked: an inexact one can
+/// be delayed up to an hour (D-25). The manifest declares USE_EXACT_ALARM, which
+/// Android 13+ grants at install time; if it is ever missing the reminder falls
+/// back to an inexact alarm.
 class LocalNotificationGateway implements NotificationGateway {
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _ready = false;
+
+  /// Error code the plugin raises when exact alarms are not allowed.
+  static const _exactAlarmsNotPermitted = 'exact_alarms_not_permitted';
 
   static const _channel = AndroidNotificationDetails(
     'task_reminders',
@@ -56,13 +62,21 @@ class LocalNotificationGateway implements NotificationGateway {
     await _ensureReady();
     final date = tz.TZDateTime(tz.local, when.year, when.month, when.day, when.hour, when.minute);
 
-    await _plugin.zonedSchedule(
-      id: id,
-      title: title,
-      body: body,
-      scheduledDate: date,
-      notificationDetails: const NotificationDetails(android: _channel),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-    );
+    Future<void> schedule(AndroidScheduleMode mode) => _plugin.zonedSchedule(
+          id: id,
+          title: title,
+          body: body,
+          scheduledDate: date,
+          notificationDetails: const NotificationDetails(android: _channel),
+          androidScheduleMode: mode,
+        );
+
+    try {
+      await schedule(AndroidScheduleMode.exactAllowWhileIdle);
+    } on PlatformException catch (error) {
+      // Without the exact-alarm permission a late reminder beats no reminder.
+      if (error.code != _exactAlarmsNotPermitted) rethrow;
+      await schedule(AndroidScheduleMode.inexactAllowWhileIdle);
+    }
   }
 }
