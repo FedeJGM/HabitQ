@@ -32,7 +32,9 @@ class LocalNotificationGateway implements NotificationGateway {
     tz.setLocalLocation(tz.getLocation(timezone.identifier));
     await _plugin.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        // A white silhouette: Android only shows the alpha of a status-bar icon,
+        // so the colored launcher icon would appear as a solid square.
+        android: AndroidInitializationSettings('@drawable/ic_stat_hq'),
       ),
     );
     _ready = true;
