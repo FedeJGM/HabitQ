@@ -9,6 +9,7 @@ void main() {
     return MaterialApp(
       routes: {
         AppRoutes.home: (_) => const Scaffold(body: Text('Home page')),
+        AppRoutes.activity: (_) => const Scaffold(body: Text('Activity page')),
         AppRoutes.chat: (_) => const Scaffold(body: Text('Chat page')),
         AppRoutes.profile: (_) => const Scaffold(body: Text('Profile page')),
       },
@@ -45,6 +46,15 @@ void main() {
     await tester.tap(find.text('Chat'));
     await tester.pumpAndSettle();
     expect(find.text('Chat page'), findsOneWidget);
+  });
+
+  testWidgets('navigates to the Actividad route', (tester) async {
+    await tester.pumpWidget(buildApp());
+
+    await tester.tap(find.text('Actividad'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Activity page'), findsOneWidget);
   });
 
   testWidgets('tapping the current tab does not navigate', (tester) async {

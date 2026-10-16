@@ -64,7 +64,8 @@ class DayTask {
   bool get isCounter => target > 1;
   bool get completed => progress >= target;
 
-  DayTask copyWith({int? progress}) => DayTask(
+  /// [clearReminder] removes the reminder (a null [reminderTime] means "keep").
+  DayTask copyWith({int? progress, String? reminderTime, bool clearReminder = false}) => DayTask(
         id: id,
         taskKey: taskKey,
         label: label,
@@ -72,7 +73,7 @@ class DayTask {
         unit: unit,
         step: step,
         progress: progress ?? this.progress,
-        reminderTime: reminderTime,
+        reminderTime: clearReminder ? null : (reminderTime ?? this.reminderTime),
       );
 
   /// The backend returns "08:30:00"; the app works with "08:30".

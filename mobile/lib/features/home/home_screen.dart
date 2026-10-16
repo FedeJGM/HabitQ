@@ -11,8 +11,8 @@ import '../../core/widgets/habitq_shell.dart';
 import '../auth/user.dart';
 
 /// Landing tab after login/onboarding: greeting card plus entry points to
-/// Chat and Mis hábitos (Perfil lives in the bottom navigation). No task list:
-/// the backend has no daily tasks.
+/// Chat and Mis hábitos (Perfil lives in the bottom navigation). The daily
+/// checklist is not here: it lives in the Actividad tab.
 ///
 /// Chat entry: a single "Chat con HabitQ" card until the user has a past
 /// conversation; from then on "Continuar conversación" (most recent one) and

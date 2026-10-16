@@ -23,6 +23,8 @@ class HabitQShell extends StatelessWidget {
     switch (tab) {
       case HabitQTab.home:
         return AppRoutes.home;
+      case HabitQTab.activity:
+        return AppRoutes.activity;
       case HabitQTab.chat:
         return AppRoutes.chat;
       case HabitQTab.profile:
