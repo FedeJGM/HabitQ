@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'core/theme/app_theme.dart';
+import 'features/activity/activity_screen.dart';
 import 'features/auth/auth_service.dart';
 import 'features/auth/login_screen.dart';
 import 'features/chat/chat_screen.dart';
@@ -20,6 +21,7 @@ class AppRoutes {
   static const onboarding = '/onboarding';
   static const onboardingHabits = '/onboarding/habits';
   static const home = '/home';
+  static const activity = '/activity';
   static const habits = '/habits';
   static const profile = '/profile';
   static const chat = '/chat';
@@ -32,6 +34,7 @@ class AppRoutes {
         onboarding: (_) => const OnboardingScreen(),
         onboardingHabits: (_) => const OnboardingHabitsScreen(),
         home: (_) => const HomeScreen(),
+        activity: (_) => const ActivityScreen(),
         habits: (_) => const HabitsScreen(),
         profile: (_) => ProfileScreen(authService: AuthService()),
         chat: (_) => const ChatScreen(),

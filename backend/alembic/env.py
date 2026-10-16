@@ -10,6 +10,8 @@ from app.models import document_chunk  # noqa: F401  (registers DocumentChunk on
 from app.models import scientific_document  # noqa: F401  (registers ScientificDocument on Base.metadata)
 from app.models import conversation  # noqa: F401  (registers Conversation on Base.metadata)
 from app.models import message  # noqa: F401  (registers Message on Base.metadata)
+from app.models import daily_task  # noqa: F401  (registers DailyTask on Base.metadata)
+from app.models import task_progress  # noqa: F401  (registers TaskProgress on Base.metadata)
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

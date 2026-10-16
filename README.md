@@ -8,6 +8,7 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 
 **Backend (FastAPI)**
 - **Auth, perfil y hábitos:** `POST /auth/google`, `GET /auth/me`, `POST /auth/onboarding-complete`, `POST /auth/refresh`, `POST /auth/logout`, `GET/PUT /profile`, `GET/POST /habits`, `PUT /habits/{id}`.
+- **Tareas diarias:** `GET /tasks/catalog`, `GET /tasks?day=`, `POST /tasks`, `PUT /tasks/{id}`, `DELETE /tasks/{id}`, `PUT /tasks/{id}/progress`.
 - **Chat:** `POST /chat`, `GET /chat/conversations`, `GET /chat/conversations/{id}/messages`, `DELETE /chat/conversations/{id}`.
 - **Administración:** panel web en `GET /admin` más `POST /admin/discovery`, `GET /admin/candidates`, `POST /admin/candidates/{id}/approve`, `POST /admin/candidates/{id}/reject`, `POST /admin/ingest`, `GET /admin/documents` y `DELETE /admin/documents/{id}`.
 - Todos los endpoints privados exigen JWT válido (`get_current_user`). Los de `/admin` además exigen que el correo del usuario esté en `ADMIN_EMAILS` (`require_admin`): 401 sin sesión, 403 si no es admin.
@@ -15,7 +16,8 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 **Mobile (Flutter)**
 - Login con Google + consentimiento inicial (una vez por dispositivo, guardado localmente).
 - Onboarding: perfil básico (edad + objetivo principal) + cuestionario de 9 preguntas por los 6 dominios de hábitos.
-- Home: saludo, cerrar sesión, navegación a Mis Hábitos y Perfil.
+- Home: saludo según la hora (de 19:00 a 04:59 «Es una gran noche», si no «Es un nuevo día»), cerrar sesión, navegación a Mis Hábitos y Perfil, y el chat: un botón único hasta la primera conversación; después «Continuar conversación» y «Nuevo chat con HabitQ».
+- Actividad: checklist diario por objetivo. Eliges tareas de un catálogo fijo para tu objetivo, las marcas (casilla o contador) y la lista parte en cero a tu medianoche; la franja semanal muestra días anteriores en solo lectura. Cada tarea puede tener un recordatorio local a la hora que elijas (notificación del propio teléfono, sin servidor). Ver `docs/decisions.md` D-23 a D-25.
 - Mis Hábitos: ver y editar los hábitos ya registrados (autosave).
 - Perfil: ver y editar edad y objetivo principal (autosave).
 - Chat con HabitQ: conversación con IA respaldada por RAG, con referencias completas por cada respuesta (autores, año, revista, páginas y enlace DOI tocable) y personalización según perfil/hábitos cuando es relevante.
@@ -29,7 +31,7 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 
 > **Nota de alcance (Login):** el boceto de Figma (`Diseño/Inicio de sesión.png`) incluye un formulario de correo/contraseña. El plan (secciones 2, 3, 10, 20) excluye explícitamente el login tradicional del MVP — solo Google Sign-In. La pantalla implementada usa **solo Google**, adaptando el boceto (sin campos de correo/contraseña ni link de registro).
 >
-> **Nota de alcance (Home):** el boceto `Diseño/Inicio.png` incluye gamificación (logros, racha, badge de puntos) y un tab de estadísticas ("Actividad"), que el plan (sección 2, "Fuera del MVP") excluye explícitamente. La pantalla Home implementada sigue el plan escrito, no el boceto.
+> **Nota de alcance (Home y Actividad):** el boceto `Diseño/Inicio.png` incluye gamificación (logros, racha, badge de puntos) que el plan (sección 2, "Fuera del MVP") excluye explícitamente; la pantalla Home implementada sigue el plan escrito, no el boceto. El boceto `Diseño/Actividad.png` (agenda diaria con franja semanal, tareas con casilla o contador y recordatorios) se implementó el 2026-10-15 como la pestaña **Actividad**, limitada al checklist diario: sin gamificación, estadísticas ni tareas generadas automáticamente (D-23). La caminata se mide en minutos con un contador manual.
 
 ## Estructura
 
@@ -112,7 +114,7 @@ pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r req
 alembic upgrade head
 ```
 
-Crea las 9 tablas (migraciones `0001`–`0008`).
+Crea las 11 tablas (migraciones `0001`–`0009`).
 
 > **Si ya tenías documentos indexados con una versión anterior** (modelo `all-MiniLM-L6-v2`), reindéxalos después de actualizar. Los vectores de modelos distintos no son comparables: sin este paso el chat **no da error**, pero recupera fragmentos equivocados.
 > ```bash
