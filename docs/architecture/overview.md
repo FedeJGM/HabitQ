@@ -53,6 +53,12 @@ Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos o
 | GET | `/habits` | Sí | Lista todos los `habit_records` del usuario |
 | POST | `/habits` | Sí | Crea un nuevo registro de hábito |
 | PUT | `/habits/{habit_id}` | Sí | Actualiza un registro existente propio |
+| GET | `/tasks/catalog` | Sí | Tareas del catálogo para el objetivo del perfil (`key`, `label`, `target`, `unit`, `step`); lista vacía si no hay perfil |
+| GET | `/tasks?day=YYYY-MM-DD` | Sí | Tareas activas del usuario ese día con `progress`, `completed` y `archived`. Un día pasado solo es de lectura (lo hace cumplir la app) |
+| POST | `/tasks` | Sí | Activa una tarea del catálogo del objetivo (`task_key`, `reminder_time` opcional). 422 si no es del objetivo; 409 si ya está activa |
+| PUT | `/tasks/{id}` | Sí | Cambia o quita (`null`) la hora del recordatorio (404 si no existe, es ajena o está archivada) |
+| DELETE | `/tasks/{id}` | Sí | Archiva la tarea y conserva su historial (204) |
+| PUT | `/tasks/{id}/progress` | Sí | Guarda el progreso de un día (`day`, `progress` de 0 a la meta); `day` debe estar a ±1 día de la fecha UTC del servidor |
 | POST | `/chat` | Sí | Retrieval + Gemini (con personalización) en una conversación, nueva o existente; persiste ambos mensajes de forma atómica. Devuelve `sources` (título, organización, URL, autores, año, DOI y páginas recuperadas) y las guarda con el mensaje del asistente |
 | GET | `/chat/conversations` | Sí | Lista las conversaciones del usuario, más reciente primero |
 | GET | `/chat/conversations/{id}/messages` | Sí | Mensajes de una conversación propia, orden cronológico; cada uno trae sus `sources` (lista vacía si no tiene) (404 si no existe o es de otro usuario) |
@@ -84,6 +90,7 @@ lib/
 │   ├── consent/      # ConsentScreen, ConsentStorage (local, por dispositivo)
 │   ├── onboarding/    # OnboardingScreen (perfil), OnboardingHabitsScreen (9 preguntas), OnboardingService
 │   ├── home/         # HomeScreen (hub de navegación)
+│   ├── activity/     # ActivityScreen (checklist diario), TasksService, ReminderService (+ LocalNotificationGateway sobre flutter_local_notifications)
 │   ├── habits/       # HabitsScreen (ver/editar), HabitsService, habit_questions.dart (metadata compartida)
 │   ├── profile/      # ProfileScreen (ver/editar), ProfileService, profile_options.dart (metadata compartida)
 │   └── chat/         # ChatScreen (conversación en vivo), ConversationHistoryScreen, ChatService
@@ -109,7 +116,9 @@ Login ──(sign-in exitoso)──▶ ¿consentimiento local aceptado?
                                             Home
 ```
 
-Desde Home: navegación a Mis Hábitos, Perfil y Chat (las tres reales). Desde el Chat, un ícono en el `AppBar` navega al historial de conversaciones.
+Desde Home: navegación a Mis Hábitos, Perfil y Chat (las tres reales). En Home, el chat es un botón único («Chat con HabitQ») hasta que existe alguna conversación; a partir de ahí son dos: «Continuar conversación» (abre la más reciente) y «Nuevo chat con HabitQ». Desde el Chat, un ícono en el `AppBar` navega al historial de conversaciones.
+
+La barra inferior tiene cuatro pestañas: Inicio, **Actividad**, Chat y Perfil (D-23). Actividad es el checklist diario: franja semanal (hoy editable, días pasados en solo lectura), tareas con casilla o contador, botón del lápiz para elegir tareas de un catálogo por objetivo y recordatorios locales por tarea (D-24, D-25). Los recordatorios los programa el propio teléfono, sin servidor: `ReminderService` decide qué programar y `LocalNotificationGateway` habla con el plugin de notificaciones; al cerrar sesión se cancelan todos.
 
 ### Chat (RAG)
 
@@ -162,4 +171,4 @@ POST /admin/ingest ──▶ (segundo plano) descarga el PDF ──▶ ingest_do
 
 ## Base de datos
 
-9 tablas hoy (migraciones `0001`–`0008`): `users`, `profiles`, `habit_records`, `scientific_documents` (con `doi` y `domain`), `document_chunks` (con `embedding` como `ARRAY(FLOAT)`, no `Vector` — ver D-12 en `docs/decisions.md`), `conversations`, `messages` (con `sources` JSONB) y las dos del descubrimiento de documentos: `discovery_runs` y `document_candidates`. Las siete primeras son el modelo de datos del plan (sección 8); las dos últimas son un agregado posterior (D-17). Ver [`../diagrams/er-diagram.md`](../diagrams/er-diagram.md) para el ER completo.
+11 tablas hoy (migraciones `0001`–`0009`): `users`, `profiles`, `habit_records`, `scientific_documents` (con `doi` y `domain`), `document_chunks` (con `embedding` como `ARRAY(FLOAT)`, no `Vector` — ver D-12 en `docs/decisions.md`), `conversations`, `messages` (con `sources` JSONB), las dos del descubrimiento de documentos (`discovery_runs` y `document_candidates`) y las dos del checklist diario (`daily_tasks` y `task_progress`). Las siete primeras son el modelo de datos del plan (sección 8); las del descubrimiento son un agregado posterior (D-17) y las de tareas otro (D-23, D-24). Ver [`../diagrams/er-diagram.md`](../diagrams/er-diagram.md) para el ER completo.

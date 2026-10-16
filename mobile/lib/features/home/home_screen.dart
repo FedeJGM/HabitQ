@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../activity/reminder_service.dart';
 import '../auth/auth_service.dart';
 import '../chat/chat_service.dart';
 import '../../core/widgets/habitq_bottom_nav.dart';
@@ -11,8 +12,8 @@ import '../../core/widgets/habitq_shell.dart';
 import '../auth/user.dart';
 
 /// Landing tab after login/onboarding: greeting card plus entry points to
-/// Chat and Mis hábitos (Perfil lives in the bottom navigation). No task list:
-/// the backend has no daily tasks.
+/// Chat and Mis hábitos (Perfil lives in the bottom navigation). The daily
+/// checklist is not here: it lives in the Actividad tab.
 ///
 /// Chat entry: a single "Chat con HabitQ" card until the user has a past
 /// conversation; from then on "Continuar conversación" (most recent one) and
@@ -82,6 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handleSignOut() async {
+    await ReminderService().cancelAll();
     await _authService.signOut();
     if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);

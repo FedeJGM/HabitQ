@@ -68,6 +68,8 @@ Fuentes verificables
 - Recomendaciones personalizadas.
 - Visualización de fuentes utilizadas.
 - Respuesta controlada cuando no exista evidencia suficiente.
+- Checklist diario por objetivo en la pestaña Actividad: tareas elegidas de un catálogo fijo, con casilla o contador, reinicio diario y consulta de días pasados en solo lectura. *(Ampliación 2026-10-15: ver `docs/decisions.md` D-23 y D-24.)*
+- Recordatorios locales por tarea, a la hora que elige la persona. *(Ampliación 2026-10-15: ver D-25.)*
 - APK Android instalable.
 
 ## Fuera del MVP
@@ -83,10 +85,10 @@ Fuentes verificables
 - Rankings.
 - Recuperación de contraseña propia.
 - Registro con usuario/contraseña tradicional.
-- Notificaciones inteligentes.
+- Notificaciones inteligentes. *(Actualización 2026-10-15: siguen fuera. Lo que sí se implementó son recordatorios locales fijados por la persona, sin lógica del sistema que decida cuándo avisar; ver D-25.)*
 - Informes semanales.
 - Objetivos automáticos.
-- Tareas diarias automáticas.
+- Tareas diarias automáticas. *(Actualización 2026-10-15: las tareas generadas automáticamente siguen fuera. Se incluyó un checklist diario en el que la persona elige sus tareas de un catálogo fijo por objetivo; ver D-23 y D-24.)*
 - Google Fit.
 - Apple Health.
 - Wearables.
@@ -100,7 +102,7 @@ Fuentes verificables
 - Tratamientos.
 - Prescripción de medicamentos.
 
-**Regla:** después del 11 de octubre no se agregan nuevas funcionalidades.
+**Regla:** después del 11 de octubre no se agregan nuevas funcionalidades. *(Excepción 2026-10-15: el checklist diario y sus recordatorios locales se aprobaron de forma explícita; ver D-23. Si el calendario se aprieta se recortan en este orden: recordatorios, franja semanal, contadores.)*
 
 ---
 
@@ -409,6 +411,34 @@ chunk_index INTEGER
 embedding ARRAY(FLOAT)
 ```
 
+## daily_tasks
+
+*(Ampliación 2026-10-15, migración `0009`; ver D-24.)*
+
+```text
+id UUID PK
+user_id UUID FK users.id
+task_key VARCHAR
+target INTEGER
+reminder_time TIME NULL
+created_at TIMESTAMP
+archived_at TIMESTAMP NULL
+```
+
+Único activo por `(user_id, task_key)`. `target = 1` es una casilla; mayor que 1 es un contador. El catálogo de tareas por objetivo vive en código, no en tabla.
+
+## task_progress
+
+```text
+id UUID PK
+task_id UUID FK daily_tasks.id
+day DATE
+progress INTEGER
+updated_at TIMESTAMP
+```
+
+Único por `(task_id, day)`. La tarea está cumplida cuando `progress >= target`.
+
 ---
 
 # 9. API mínima
@@ -440,6 +470,19 @@ PUT /profile
 GET /habits
 POST /habits
 PUT /habits/{id}
+```
+
+## Tareas
+
+*(Ampliación 2026-10-15; ver D-23 y D-24.)*
+
+```http
+GET /tasks/catalog
+GET /tasks?day=YYYY-MM-DD
+POST /tasks
+PUT /tasks/{id}
+DELETE /tasks/{id}
+PUT /tasks/{id}/progress
 ```
 
 ## Chat
@@ -759,6 +802,8 @@ Una tarea puede marcarse `Done` solamente si:
 - Manejo de errores.
 - Seguridad.
 
+**Ampliación 2026-10-15 (D-23):** checklist diario por objetivo en la pestaña Actividad y recordatorios locales, desarrollados en `feature/daily-tasks`. Orden: documentación de la decisión, backend (catálogo, migración `0009`, endpoints), pantalla Actividad y, al final, recordatorios.
+
 ## Fase 5 — Feature Freeze + QA
 **12 – 25 octubre**
 
@@ -1058,6 +1103,8 @@ No agregar módulos nuevos.
 
 ## Semana 7 — 12 al 18 octubre
 
+*(Ampliación 2026-10-15: además de lo listado, esta semana y la siguiente incluyen el checklist diario y sus recordatorios; ver D-23. No altera los hitos de QA de la Semana 8.)*
+
 ### Lunes 12
 P2: conversaciones y mensajes.  
 P1: historial de conversaciones.
@@ -1224,7 +1271,7 @@ No estudiar Python completo antes de comenzar.
 2. Trabajar en bloques de 60–90 minutos.
 3. Una funcionalidad terminada vale más que tres iniciadas.
 4. No cambiar stack después de la semana 2.
-5. No agregar módulos después del 11 de octubre.
+5. No agregar módulos después del 11 de octubre. *(Única excepción: checklist diario, D-23.)*
 6. No refactorizar por estética durante la fase final.
 7. P0/P1 tienen prioridad sobre nuevas mejoras.
 8. Evitar dependencias innecesarias.

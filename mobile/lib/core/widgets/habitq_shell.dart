@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app_routes.dart';
+import '../../features/activity/reminder_service.dart';
 import '../../features/auth/auth_service.dart';
 import 'habitq_bottom_nav.dart';
 import 'habitq_header.dart';
@@ -23,6 +24,8 @@ class HabitQShell extends StatelessWidget {
     switch (tab) {
       case HabitQTab.home:
         return AppRoutes.home;
+      case HabitQTab.activity:
+        return AppRoutes.activity;
       case HabitQTab.chat:
         return AppRoutes.chat;
       case HabitQTab.profile:
@@ -46,8 +49,14 @@ class HabitQShell extends StatelessWidget {
   }
 }
 
-/// Default logout used by tabs: clears the session and returns to login.
-Future<void> signOutAndGoToLogin(BuildContext context, [AuthService? authService]) async {
+/// Default logout used by tabs: clears the session (and the phone's task
+/// reminders, which belong to that session) and returns to login.
+Future<void> signOutAndGoToLogin(
+  BuildContext context, [
+  AuthService? authService,
+  ReminderService? reminders,
+]) async {
+  await (reminders ?? ReminderService()).cancelAll();
   await (authService ?? AuthService()).signOut();
   if (!context.mounted) return;
   Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);

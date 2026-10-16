@@ -267,3 +267,64 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Eliminación:** `document_chunks` no tiene `ON DELETE CASCADE`, así que se borran primero los chunks y luego el documento, todo en una transacción. El candidato `ingested` con el mismo DOI (sin distinguir mayúsculas) pasa a `rejected`, de modo que el descubrimiento no lo proponga de nuevo (D-17). El PDF se conserva en disco. No se agregó migración.
 
 **Limitación conocida:** `messages.sources` guarda un snapshot de texto, no una FK (D-18), por lo que los mensajes de chat anteriores siguen mostrando la referencia de un documento ya eliminado.
+
+
+---
+
+## D-23 — Excepción al alcance y al freeze: checklist diario por objetivo
+
+**Contexto:** el plan dejaba fuera "Tareas diarias automáticas" y fijaba el 11 de octubre como cierre de funcionalidades. El diseño Figma incluye una pantalla **Actividad** (`Diseño/Actividad.png`: franja semanal, tareas con casilla, contadores como «Tomar agua 2/8» y recordatorios) que el rediseño de la app descartó porque el backend no tenía tareas. `Diseño/Inicio.png` no contiene ninguna lista de tareas.
+
+**Decisión (2026-10-15):** se reabre el alcance, con aprobación explícita de la persona responsable del proyecto, para un checklist diario ligado al objetivo principal del perfil:
+- Nueva pestaña **Actividad** (barra: Inicio / Actividad / Chat / Perfil).
+- La persona elige, de un catálogo fijo por cada uno de los 6 objetivos (D-06), qué tareas activar. Sin texto libre.
+- Cada tarea tiene una meta (1 = casilla; N = contador) y progreso por día.
+- La lista de hoy parte en cero a la medianoche del propio usuario; la franja semanal permite ver días pasados en solo lectura (D-24).
+- Recordatorio local opcional por tarea (D-25).
+
+**Sigue fuera del MVP:** tareas generadas automáticamente, notificaciones inteligentes (push o decididas por el servidor), gamificación, logros y puntos, seguimiento por GPS (la barra de progreso en kilómetros es un contador manual) y cualquier diagnóstico o tratamiento. Las tareas son hábitos de comportamiento, no indicaciones médicas.
+
+**Alternativas descartadas:** (a) dejarlo como mejora posterior al MVP: la persona responsable prefirió incluirlo; (b) mostrar la lista dentro de Inicio: se eligió la pestaña Actividad por fidelidad al Figma; (c) tareas libres escritas por la persona usuaria: abre texto libre y validación de contenido.
+
+**Riesgo asumido:** la regla 5 de la sección 20 y la nota del 11 de octubre quedan con esta excepción documentada. Si el calendario se aprieta, el orden de recorte es: recordatorios, franja semanal, contadores.
+
+---
+
+## D-24 — Modelo de tareas, catálogo servido por la API y día por fecha local
+
+**Contexto:** el backend guarda todas las marcas de tiempo en UTC y no tiene fechas ni zona horaria por usuario. El reinicio «después de medianoche» debe ocurrir en la medianoche de cada persona.
+
+**Decisión (2026-10-15):**
+- **Catálogo en código** (`backend/app/services/task_catalog.py`), no en tabla: por objetivo, 4 tareas con `{key, label, target, unit, step}`. `step` es lo que suma un toque en un contador (p. ej. «Caminar» suma de 5 en 5 hasta 30 min). Lo sirve `GET /tasks/catalog` según `profile.main_goal`, de modo que la app no duplica los textos. Solo se puede activar una tarea del catálogo del objetivo del perfil (422 si no; sin perfil no hay catálogo).
+- **Dos tablas** (migración `0009`): `daily_tasks` (tareas activadas por la persona: `task_key`, `target`, `reminder_time`, `archived_at`) y `task_progress` (`task_id`, `day DATE`, `progress`, único por `(task_id, day)`). Una tarea queda completada cuando `progress >= target`.
+- **Día por fecha local:** la app envía `day=YYYY-MM-DD` con la fecha de su celular y el servidor guarda por esa fecha. No se agrega zona horaria al perfil.
+- **Acotación en el servidor:** `day` solo se acepta dentro de ±1 día de la fecha UTC del servidor, lo que cubre cualquier huso horario sin que el servidor lo conozca.
+- **Días pasados:** se consultan, pero solo «hoy» es editable; lo hace cumplir la app.
+- **Quitar una tarea** la archiva (`archived_at`) y conserva su historial. Una tarea archivada solo se lista en los días en que tiene progreso real (mayor que 0): un 0 es una tarea marcada y desmarcada, no historia. La respuesta lleva `archived: true` en esos casos; la app no la muestra hoy y la muestra en solo lectura en días pasados. (Corrige un defecto hallado en pruebas: una tarea archivada con un 0 seguía visible hoy y al tocarla daba 404.)
+
+**Alternativas descartadas:** (a) campo de zona horaria en el perfil: más piezas y más datos personales para el mismo resultado; (b) catálogo en tabla con panel de administración: sin necesidad en el MVP, un cambio de catálogo es un cambio de código revisado.
+
+**Limitación conocida:** un celular con la hora mal configurada escribe en otro día, dentro del margen de ±1 día. No se detecta ni corrige.
+
+---
+
+## D-25 — Recordatorios locales de tareas
+
+**Contexto:** el plan excluye «Notificaciones inteligentes». El diseño de Actividad muestra un reloj de recordatorio por tarea y la persona responsable pidió incluirlo.
+
+**Decisión (2026-10-15, ajustada tras probar en dispositivo):** el recordatorio es una **notificación local** programada en el celular a la hora que la persona elige (`daily_tasks.reminder_time`). No hay servidor de notificaciones, ni envío push, ni lógica que decida cuándo avisar. El texto es neutro y solo nombra la tarea. Detalles:
+- **Una notificación por día, no una repetida:** se programan los próximos 7 días uno por uno y se refrescan cada vez que se abre la pestaña Actividad (`GET /tasks`). Así, si la tarea ya está hecha hoy, solo se omite el aviso de hoy; los de los días siguientes siguen. Marcar o desmarcar una tarea reprograma.
+- **Alarmas exactas:** se declara `USE_EXACT_ALARM` (Android 13+, se concede al instalar) y `SCHEDULE_EXACT_ALARM` hasta Android 12L. Si el permiso falta, ese aviso se programa como inexacto en vez de perderse.
+- **Ids estables** por tarea y día, derivados del id de la tarea, y la sincronización solo cancela las pendientes: no borra notificaciones ya mostradas ni una nueva reemplaza a otra.
+- **Permiso de notificaciones:** en Android 13+ se solicita al fijar un recordatorio. Si se rechaza, la hora se guarda y la tarea funciona sin aviso.
+- **Cerrar sesión** cancela todos los recordatorios del teléfono.
+
+**Por qué no contradice la exclusión:** lo excluido son las notificaciones *inteligentes* (decididas por el sistema). Aquí la persona fija la hora y el aviso es fijo.
+
+**Alternativas descartadas:** (a) push desde el servidor: requiere servicio externo y credenciales, fuera del alcance; (b) alarmas inexactas: la primera versión las usó y en el dispositivo (Android 16) una notificación programada a las 23:52 llegó unos 4 minutos tarde, y los avisos de días siguientes tienen una ventana de hasta 1 hora; (c) `SCHEDULE_EXACT_ALARM` en Android 14+: viene denegado y obliga a la persona a activarlo a mano en Ajustes.
+
+**Limitaciones conocidas:**
+- `USE_EXACT_ALARM` está pensado para apps de alarmas y calendario y Google Play lo restringe: sirve para la distribución por APK de este proyecto, pero habría que revisarlo (o cambiar a `SCHEDULE_EXACT_ALARM`) si algún día se publica en Play Store.
+- Los recordatorios se refrescan al abrir Actividad: si la persona no abre la app en más de 7 días, dejan de llegar hasta que la abra.
+- Un aviso que Android alcanzara a retrasar y que aún no se hubiera mostrado se cancelaría si la sincronización corre justo entonces.
+- No hay recordatorios en un día pasado ni se programa nada para tareas sin hora.

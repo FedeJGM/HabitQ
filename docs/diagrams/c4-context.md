@@ -40,7 +40,7 @@ graph TD
 | Administrador → Panel → Backend | ✅ Implementado (`/admin`; requiere que el correo esté en `ADMIN_EMAILS`) |
 | Panel → Google (OAuth) | ✅ Implementado (Google Identity Services en el navegador; exige registrar `http://localhost` y `http://localhost:8000` como orígenes de JavaScript del cliente Web) |
 | Backend → Google (validar ID token) | ✅ Implementado |
-| Backend → PostgreSQL | ✅ Implementado (9 tablas, migraciones `0001`–`0008`) |
+| Backend → PostgreSQL | ✅ Implementado (11 tablas, migraciones `0001`–`0009`) |
 | Backend → Gemini | ✅ Implementado (`POST /chat`, retry configurado — ver `docs/decisions.md` D-14/D-16) |
 | Backend → Europe PMC | ✅ Implementado (`POST /admin/discovery` y descarga de PDFs aprobados; D-17) |
 | Backend → Hugging Face Hub | ✅ Solo la primera vez en cada máquina: después el modelo se carga desde disco (D-20) |
