@@ -172,6 +172,15 @@ void main() {
     expect(find.text('DOM'), findsOneWidget);
   });
 
+  testWidgets('labels the vertical axis with 0, 50 and 100 percent', (tester) async {
+    await pumpScreen(tester, stats: _FakeStatsService());
+
+    final chart = find.byKey(const ValueKey('stats-chart'));
+    expect(find.descendant(of: chart, matching: find.text('0 %')), findsOneWidget);
+    expect(find.descendant(of: chart, matching: find.text('50 %')), findsOneWidget);
+    expect(find.descendant(of: chart, matching: find.text('100 %')), findsOneWidget);
+  });
+
   testWidgets('summarizes today in tasks', (tester) async {
     await pumpScreen(tester, stats: _FakeStatsService());
 

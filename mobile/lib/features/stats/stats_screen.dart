@@ -209,7 +209,11 @@ class _StatsScreenState extends State<StatsScreen> {
       minY: 0,
       maxY: 100,
       alignment: BarChartAlignment.spaceAround,
-      gridData: const FlGridData(show: false),
+      gridData: FlGridData(
+        drawVerticalLine: false,
+        horizontalInterval: 50,
+        getDrawingHorizontalLine: (_) => const FlLine(color: AppColors.surfaceMuted, strokeWidth: 1),
+      ),
       borderData: FlBorderData(show: false),
       barTouchData: BarTouchData(
         touchTooltipData: BarTouchTooltipData(
@@ -225,7 +229,17 @@ class _StatsScreenState extends State<StatsScreen> {
       titlesData: FlTitlesData(
         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 44,
+            interval: 50,
+            getTitlesWidget: (value, meta) => SideTitleWidget(
+              meta: meta,
+              child: Text('${value.round()} %', style: _mutedStyle.copyWith(fontSize: 11)),
+            ),
+          ),
+        ),
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
