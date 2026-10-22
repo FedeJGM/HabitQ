@@ -92,6 +92,7 @@ lib/
 │   ├── onboarding/    # OnboardingScreen (perfil), OnboardingHabitsScreen (9 preguntas), OnboardingService
 │   ├── home/         # HomeScreen (hub de navegación)
 │   ├── activity/     # ActivityScreen (checklist diario), TasksService, ReminderService (+ LocalNotificationGateway sobre flutter_local_notifications)
+│   ├── stats/        # StatsScreen (cumplimiento de 7 días con fl_chart y resumen de hábitos), StatsService
 │   ├── habits/       # HabitsScreen (ver/editar), HabitsService, habit_questions.dart (metadata compartida)
 │   ├── profile/      # ProfileScreen (ver/editar), ProfileService, profile_options.dart (metadata compartida)
 │   └── chat/         # ChatScreen (conversación en vivo), ConversationHistoryScreen, ChatService
@@ -119,7 +120,11 @@ Login ──(sign-in exitoso)──▶ ¿consentimiento local aceptado?
 
 Desde Home: navegación a Mis Hábitos, Perfil y Chat (las tres reales). En Home, el chat es un botón único («Chat con HabitQ») hasta que existe alguna conversación; a partir de ahí son dos: «Continuar conversación» (abre la más reciente) y «Nuevo chat con HabitQ». Desde el Chat, un ícono en el `AppBar` navega al historial de conversaciones.
 
-La barra inferior tiene cuatro pestañas: Inicio, **Actividad**, Chat y Perfil (D-23). Actividad es el checklist diario: franja semanal (hoy editable, días pasados en solo lectura), tareas con casilla o contador, botón del lápiz para elegir tareas de un catálogo por objetivo y recordatorios locales por tarea (D-24, D-25). Los recordatorios los programa el propio teléfono, sin servidor: `ReminderService` decide qué programar y `LocalNotificationGateway` habla con el plugin de notificaciones; al cerrar sesión se cancelan todos.
+La barra inferior tiene cinco pestañas: Inicio, **Actividad**, **Estadísticas**, Chat y Perfil (D-23, D-28). Actividad es el checklist diario: franja semanal (hoy editable, días pasados en solo lectura), tareas con casilla o contador, botón del lápiz para elegir tareas de un catálogo por objetivo y recordatorios locales por tarea (D-24, D-25). Los recordatorios los programa el propio teléfono, sin servidor: `ReminderService` decide qué programar y `LocalNotificationGateway` habla con el plugin de notificaciones; al cerrar sesión se cancelan todos.
+
+### Estadísticas
+
+`StatsScreen` (D-28) muestra los últimos 7 días terminando hoy, con la fecha local de la persona. `StatsService.fetchStats` llama a `GET /tasks/stats?day=` y la pantalla dibuja con `fl_chart` las barras de cumplimiento por día (tareas completadas sobre tareas activas, con el eje vertical marcado cada 25 %), el resumen «Hoy: X de Y tareas», el mejor día y el promedio de cada tarea con contador. Si ningún día tuvo tareas, muestra un mensaje con un botón hacia Actividad. Debajo, el resumen de hábitos es una lista de solo lectura por dominio con las respuestas actuales del cuestionario: reutiliza `HabitsService.fetchHabits` y las etiquetas de `habit_questions.dart`, empareja por dominio y clave, usa el registro más reciente cuando una pregunta tiene varios y muestra «Sin responder» si falta. Cada fuente falla por separado: un error al leer los hábitos no oculta los gráficos. La etiqueta de la barra inferior baja a 11 sp para que «Estadísticas» quepa en una pantalla de 360 dp con cinco pestañas.
 
 ### Chat (RAG)
 

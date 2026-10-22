@@ -18,6 +18,7 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 - Onboarding: perfil básico (edad + objetivo principal) + cuestionario de 9 preguntas por los 6 dominios de hábitos.
 - Home: saludo según la hora (de 19:00 a 04:59 «Es una gran noche», si no «Es un nuevo día»), cerrar sesión, navegación a Mis Hábitos y Perfil, y el chat: un botón único hasta la primera conversación; después «Continuar conversación» y «Nuevo chat con HabitQ».
 - Actividad: checklist diario por objetivo. Eliges tareas de un catálogo fijo para tu objetivo, las marcas (casilla o contador) y la lista parte en cero a tu medianoche; la franja semanal muestra días anteriores en solo lectura. Cada tarea puede tener un recordatorio local a la hora que elijas (notificación del propio teléfono, sin servidor). Ver `docs/decisions.md` D-23 a D-25.
+- Estadísticas: cumplimiento de las tareas de los últimos 7 días (barras por día, promedio de los contadores y mejor día) y un resumen de solo lectura de las respuestas del cuestionario de hábitos, sin evolución ni valoración. Ver `docs/decisions.md` D-28.
 - Mis Hábitos: ver y editar los hábitos ya registrados (autosave).
 - Perfil: ver y editar edad y objetivo principal (autosave).
 - Chat con HabitQ: conversación con IA respaldada por RAG, con referencias completas por cada respuesta (autores, año, revista, páginas y enlace DOI tocable) y personalización según perfil/hábitos cuando es relevante.
@@ -189,7 +190,7 @@ Esto **no debería sobrescribir** `pubspec.yaml` ni `lib/` existentes (Flutter d
 flutter pub add google_sign_in http flutter_secure_storage url_launcher
 ```
 
-Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (116 tests).
+Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (248 tests).
 
 ### 2.1 Build de Android
 

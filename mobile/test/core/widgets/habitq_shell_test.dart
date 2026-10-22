@@ -10,6 +10,7 @@ void main() {
       routes: {
         AppRoutes.home: (_) => const Scaffold(body: Text('Home page')),
         AppRoutes.activity: (_) => const Scaffold(body: Text('Activity page')),
+        AppRoutes.stats: (_) => const Scaffold(body: Text('Stats page')),
         AppRoutes.chat: (_) => const Scaffold(body: Text('Chat page')),
         AppRoutes.profile: (_) => const Scaffold(body: Text('Profile page')),
       },
@@ -55,6 +56,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Activity page'), findsOneWidget);
+  });
+
+  testWidgets('navigates to the Estadísticas route', (tester) async {
+    await tester.pumpWidget(buildApp());
+
+    await tester.tap(find.text('Estadísticas'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Stats page'), findsOneWidget);
   });
 
   testWidgets('tapping the current tab does not navigate', (tester) async {
