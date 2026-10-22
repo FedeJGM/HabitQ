@@ -128,7 +128,7 @@ Fuentes verificables
 | Pruebas backend | Pytest |
 | Pruebas Flutter | flutter_test |
 | API testing | Postman |
-| Exposición demo | Cloudflare Tunnel |
+| Exposición demo | Tailscale *(Actualización 2026-10-16: reemplaza a Cloudflare Tunnel, que se descartó; ver D-27)* |
 | Contenedores | Docker Compose, principalmente para integración/demo |
 
 ## Decisiones
@@ -214,7 +214,7 @@ Responsable principal de:
 - Gemini.
 - Seguridad backend.
 - Pytest.
-- Cloudflare Tunnel.
+- Cloudflare Tunnel. *(Actualización 2026-10-16: se usa Tailscale; ver D-27.)*
 
 ## Ambos
 
@@ -440,6 +440,10 @@ updated_at TIMESTAMP
 
 Único por `(task_id, day)`. La tarea está cumplida cuando `progress >= target`.
 
+## Ampliaciones posteriores al plan
+
+*(2026-10-10 a 2026-10-12.)* Las tablas `discovery_runs` y `document_candidates` (panel de administración; D-17, D-21), las columnas `doi` y `domain` de `scientific_documents`, `messages.sources` (referencias del chat; D-18) y `document_candidates.heartbeat_at` no están en este modelo original. El modelo implementado completo (11 tablas, migraciones `0001`–`0009`) está en `docs/diagrams/er-diagram.md`.
+
 ---
 
 # 9. API mínima
@@ -475,11 +479,12 @@ PUT /habits/{id}
 
 ## Tareas
 
-*(Ampliación 2026-10-15; ver D-23 y D-24.)*
+*(Ampliación 2026-10-15; ver D-23 y D-24. `GET /tasks/stats` se agregó el 2026-10-21; ver D-28.)*
 
 ```http
 GET /tasks/catalog
 GET /tasks?day=YYYY-MM-DD
+GET /tasks/stats?day=YYYY-MM-DD
 POST /tasks
 PUT /tasks/{id}
 DELETE /tasks/{id}
@@ -494,6 +499,23 @@ GET /chat/conversations
 GET /chat/conversations/{id}/messages
 DELETE /chat/conversations/{id}
 ```
+
+## Administración
+
+*(Ampliación 2026-10-10 a 2026-10-12; ver D-17, D-21 y D-22. Exigen un JWT de un correo incluido en `ADMIN_EMAILS`: 401 sin sesión y 403 si la cuenta no es administradora.)*
+
+```http
+GET /admin
+POST /admin/discovery
+GET /admin/candidates
+POST /admin/candidates/{id}/approve
+POST /admin/candidates/{id}/reject
+POST /admin/ingest
+GET /admin/documents
+DELETE /admin/documents/{id}
+```
+
+`GET /admin` entrega la página del panel y no requiere sesión; sus datos pasan por las demás rutas.
 
 ---
 
@@ -1179,7 +1201,7 @@ Corregir P1.
 Pruebas regresión.
 
 ### Viernes 30
-Configurar Cloudflare Tunnel.
+Configurar Cloudflare Tunnel. *(Actualización 2026-10-16: se configura Tailscale en su lugar; ver D-27.)*
 
 ### Sábado 31
 Crear APK release preliminar.
@@ -1285,7 +1307,7 @@ No estudiar Python completo antes de comenzar.
 
 La aplicación se considera funcional si:
 
-- [ ] APK se instala en Android. *(build anterior verificado antes de Fase 3; pendiente confirmar con el código actual)*
+- [x] APK se instala en Android. *(Verificado 2026-10-21: APK de depuración con el código actual instalado y probado en un celular Android.)*
 - [x] Usuario inicia sesión con Google.
 - [x] Usuario completa onboarding.
 - [x] Perfil se guarda.
@@ -1300,7 +1322,7 @@ La aplicación se considera funcional si:
 - [x] Usuario consulta historial.
 - [x] Un usuario no accede a información de otro.
 - [ ] Errores externos no cierran la aplicación.
-- [ ] Backend puede exponerse mediante Cloudflare Tunnel.
+- [x] Backend accesible desde el celular sin cable mediante Tailscale. *(Cambia el criterio original, Cloudflare Tunnel; ver D-27. Verificado 2026-10-21.)*
 
 ---
 

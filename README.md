@@ -62,7 +62,7 @@ Completa `.env` con:
 | `DATABASE_URL` | backend | Cadena de conexión a tu PostgreSQL local |
 | `JWT_SECRET` | backend | Secreto para firmar el JWT HabitQ (cualquier string largo aleatorio) |
 | `GOOGLE_CLIENT_ID` | backend + mobile | **Web** Client ID de Google Cloud (ver sección "Credenciales de Google" abajo) |
-| `API_BASE_URL` | mobile | URL del backend. `http://10.0.2.2:8000` apunta al `localhost` de tu PC desde el emulador Android |
+| `API_BASE_URL` | mobile | URL del backend. `http://10.0.2.2:8000` apunta al `localhost` de tu PC desde el emulador Android. Con un celular físico sin cable USB se usa la dirección de Tailscale de la PC (D-27) |
 | `GEMINI_API_KEY` | backend | API key de Gemini (`google-genai`). **Obligatoria**: el backend no arranca sin ella. El modelo está fijo en `gemini-3.5-flash-lite` (D-26); que la clave sea gratuita o de pago es un asunto de facturación del proyecto de Google, no de la app |
 | `ADMIN_EMAILS` | backend | Correos de Google (separados por coma) con acceso a `/admin`. Vacía = nadie es admin |
 | `EMBEDDING_MODEL_NAME` | backend | Opcional. Modelo de embeddings (por defecto `intfloat/multilingual-e5-small`). Si lo cambias, hay que [reindexar](#4-migraciones) |
@@ -190,7 +190,7 @@ Esto **no debería sobrescribir** `pubspec.yaml` ni `lib/` existentes (Flutter d
 flutter pub add google_sign_in http flutter_secure_storage url_launcher
 ```
 
-Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (248 tests).
+Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (250 tests).
 
 ### 2.1 Build de Android
 
