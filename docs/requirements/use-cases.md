@@ -252,3 +252,16 @@ Estos casos los ejecuta una persona administradora (`ADMIN_EMAILS`) desde el pan
   4. Si la tarea ya está cumplida hoy, no avisa hoy; sí los días siguientes. Quitar la hora cancela los avisos.
 - **Postcondición:** `daily_tasks.reminder_time` guardado. Si el permiso se rechaza, la hora queda guardada y la tarea funciona sin aviso. Cerrar sesión cancela todos los recordatorios del teléfono. Son notificaciones locales a la hora fijada por la persona, sin servidor (D-25).
 - **Endpoints:** `PUT /tasks/{id}` (hora o `null`); la programación de avisos es local al dispositivo.
+
+## UC-23 — Ver mis estadísticas
+
+- **Actor:** Usuario autenticado.
+- **Precondición:** Ninguna especial; con tareas activas y progreso se ven los gráficos, sin ellos se ve un mensaje.
+- **Flujo principal:**
+  1. El usuario abre la pestaña «Estadísticas».
+  2. El sistema consulta el cumplimiento de los últimos 7 días con la fecha local del teléfono y los hábitos registrados.
+  3. Se muestran: «Hoy: X de Y tareas», el mejor día, las barras de cumplimiento por día, el promedio de cada tarea con contador y el resumen de hábitos del cuestionario.
+  4. «Editar hábitos» abre Mis hábitos.
+- **Flujo alterno:** Si ningún día de la ventana tuvo tareas, se muestra «Aún no hay datos para mostrar» con un botón «Ir a Actividad»; el resumen de hábitos se muestra igual. Si falla la lectura de los hábitos, los gráficos se muestran y solo el resumen indica el error.
+- **Postcondición:** Solo lectura: no se guarda nada. El cumplimiento de un día es tareas completadas sobre tareas activas ese día; los hábitos muestran el valor actual, sin evolución (D-28).
+- **Endpoints:** `GET /tasks/stats?day=AAAA-MM-DD`, `GET /habits`.
