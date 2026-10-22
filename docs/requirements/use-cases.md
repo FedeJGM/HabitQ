@@ -77,7 +77,8 @@ Formato: Actor, Precondición, Flujo principal, Postcondición, Endpoints involu
 - **Flujo principal:**
   1. El usuario toca el ícono de cerrar sesión en Home.
   2. El sistema intenta notificar al backend (best-effort).
-  3. El sistema borra el JWT guardado localmente.
+  3. El sistema cierra la sesión de Google en el teléfono (best-effort), para que el siguiente inicio de sesión muestre el selector de cuentas.
+  4. El sistema borra el JWT guardado localmente.
 - **Postcondición:** El usuario vuelve a la pantalla de Login. El JWT anterior sigue siendo técnicamente válido hasta su expiración natural (ver limitación en `../architecture/overview.md`).
 - **Endpoints:** `POST /auth/logout` (best-effort, no bloqueante).
 

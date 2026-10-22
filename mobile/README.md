@@ -1,17 +1,38 @@
-# mobile
+# HabitQ — app móvil
 
-A new Flutter project.
+App Flutter de HabitQ (Android). Habla con el backend FastAPI y no guarda estado propio salvo el JWT (`flutter_secure_storage`) y los recordatorios locales.
 
-## Getting Started
+## Estructura
 
-This project is a starting point for a Flutter application.
+```
+lib/
+├── main.dart, app_routes.dart
+├── core/        # config (AppConfig), networking (ApiClient), theme, utils, widgets
+└── features/    # auth, consent, onboarding, home, habits, profile, chat, activity
+```
 
-A few resources to get you started if this is your first Flutter project:
+Cada pantalla recibe su servicio por constructor (con fallback al real) para poder testearla con fakes. Ver `../docs/architecture/overview.md`.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Configuración
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Los valores se inyectan en tiempo de ejecución desde el `.env` de la raíz (`API_BASE_URL`, `GOOGLE_CLIENT_ID`), leídos por `lib/core/config/app_config.dart`:
+
+```
+flutter pub get
+flutter run --dart-define-from-file=../.env
+```
+
+La instalación del SDK, la generación de las carpetas nativas (`flutter create`) y los problemas de NDK están en el `README.md` de la raíz. Para probar en un celular físico sin cable, ver D-27 en `../docs/decisions.md`.
+
+## Calidad
+
+```
+flutter analyze
+flutter test
+```
+
+## Documentación
+
+- Arquitectura: `../docs/architecture/overview.md`
+- Casos de uso: `../docs/requirements/use-cases.md`
+- Decisiones: `../docs/decisions.md`

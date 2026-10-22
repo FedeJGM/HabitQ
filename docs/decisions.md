@@ -110,13 +110,17 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Decisión:** `/auth/logout` exige un JWT válido (protegido) y devuelve 204, pero no tiene ningún efecto sobre la validez del token — el backend no tiene forma de revocarlo. La limitación está documentada como comentario en el código (`backend/app/api/routes/auth.py`).
 
-**Mitigación real:** el cliente (`AuthService.signOut()`) llama a este endpoint best-effort y luego borra el JWT localmente — la sesión termina ahí, no porque el backend lo haya invalidado.
+**Mitigación real:** el cliente (`AuthService.signOut()`) llama a este endpoint best-effort, cierra la sesión de Google (`GoogleSignIn.signOut()`, también best-effort) y luego borra el JWT localmente — la sesión termina ahí, no porque el backend lo haya invalidado.
+
+**Actualización (2026-10-20):** el cierre de sesión de Google es necesario porque, sin él, el plugin conserva la cuenta en caché y el siguiente `signIn()` la reutiliza en silencio, sin mostrar el selector de cuentas.
 
 ---
 
 ## D-11 — Código dependiente de `FlutterSecureStorage` no se testea directamente
 
 **Contexto:** se necesitaba decidir el nivel de testing para `AuthService.signOut()`, `TokenStorage`, `ConsentStorage`.
+
+**Actualización (2026-10-20):** `AuthService` ahora recibe `GoogleSignIn` por constructor y `signOut()` sí tiene tests unitarios (`auth_service_test.dart`) con fakes de `GoogleSignIn` y del almacenamiento. La excepción sigue vigente para `TokenStorage` y `ConsentStorage`.
 
 **Decisión, con evidencia empírica:** se probó que una llamada real a `FlutterSecureStorage` sin mock, ejecutada dentro de un `testWidgets()`, **cuelga el test indefinidamente** (no lanza excepción). Por eso ninguno de estos tres componentes tiene un test unitario que ejercite su cuerpo real — se verifican indirectamente a través de los fakes que las pantallas que los consumen inyectan por constructor.
 
