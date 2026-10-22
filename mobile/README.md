@@ -8,7 +8,7 @@ App Flutter de HabitQ (Android). Habla con el backend FastAPI y no guarda estado
 lib/
 ├── main.dart, app_routes.dart
 ├── core/        # config (AppConfig), networking (ApiClient), theme, utils, widgets
-└── features/    # auth, consent, onboarding, home, habits, profile, chat, activity
+└── features/    # auth, consent, onboarding, home, activity, stats, habits, profile, chat
 ```
 
 Cada pantalla recibe su servicio por constructor (con fallback al real) para poder testearla con fakes. Ver `../docs/architecture/overview.md`.
