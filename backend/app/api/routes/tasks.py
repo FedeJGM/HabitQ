@@ -9,10 +9,13 @@ from app.models.daily_task import DailyTask
 from app.models.user import User
 from app.schemas.task import (
     CatalogTaskOut,
+    CounterStatOut,
+    StatsDayOut,
     TaskCreate,
     TaskDayOut,
     TaskOut,
     TaskProgressUpdate,
+    TaskStatsOut,
     TaskUpdate,
 )
 from app.services.profile_service import get_profile
@@ -27,6 +30,7 @@ from app.services.task_service import (
     set_reminder,
     upsert_progress,
     utc_today,
+    window_stats,
 )
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -84,6 +88,35 @@ def list_tasks_endpoint(
     db: Session = Depends(get_db),
 ) -> list[TaskDayOut]:
     return [_task_day_out(task, progress) for task, progress in list_tasks_for_day(db, current_user.id, day)]
+
+
+@router.get("/stats", response_model=TaskStatsOut)
+def task_stats_endpoint(
+    day: date,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TaskStatsOut:
+    if not day_is_in_range(day, utc_today()):
+        raise HTTPException(status_code=422, detail="Day is out of range")
+    stats = window_stats(db, current_user.id, day)
+    counters = []
+    for counter in stats.counters:
+        catalog_task = find_task(counter.task.task_key)
+        counters.append(
+            CounterStatOut(
+                task_key=counter.task.task_key,
+                label=catalog_task.label if catalog_task else counter.task.task_key,
+                unit=catalog_task.unit if catalog_task else "",
+                target=counter.task.target,
+                days=counter.days,
+                average=counter.average,
+            )
+        )
+    return TaskStatsOut(
+        days=[StatsDayOut(day=d.day, active=d.active, completed=d.completed) for d in stats.days],
+        counters=counters,
+        best_day=stats.best_day,
+    )
 
 
 @router.post("", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
