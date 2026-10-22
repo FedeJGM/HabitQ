@@ -8,7 +8,7 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 
 **Backend (FastAPI)**
 - **Auth, perfil y hábitos:** `POST /auth/google`, `GET /auth/me`, `POST /auth/onboarding-complete`, `POST /auth/refresh`, `POST /auth/logout`, `GET/PUT /profile`, `GET/POST /habits`, `PUT /habits/{id}`.
-- **Tareas diarias:** `GET /tasks/catalog`, `GET /tasks?day=`, `POST /tasks`, `PUT /tasks/{id}`, `DELETE /tasks/{id}`, `PUT /tasks/{id}/progress`.
+- **Tareas diarias:** `GET /tasks/catalog`, `GET /tasks?day=`, `POST /tasks`, `PUT /tasks/{id}`, `DELETE /tasks/{id}`, `PUT /tasks/{id}/progress`, `GET /tasks/stats?day=` (cumplimiento de los últimos 7 días, D-28).
 - **Chat:** `POST /chat`, `GET /chat/conversations`, `GET /chat/conversations/{id}/messages`, `DELETE /chat/conversations/{id}`.
 - **Administración:** panel web en `GET /admin` más `POST /admin/discovery`, `GET /admin/candidates`, `POST /admin/candidates/{id}/approve`, `POST /admin/candidates/{id}/reject`, `POST /admin/ingest`, `GET /admin/documents` y `DELETE /admin/documents/{id}`.
 - Todos los endpoints privados exigen JWT válido (`get_current_user`). Los de `/admin` además exigen que el correo del usuario esté en `ADMIN_EMAILS` (`require_admin`): 401 sin sesión, 403 si no es admin.

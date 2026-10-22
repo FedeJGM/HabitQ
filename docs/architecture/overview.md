@@ -59,6 +59,7 @@ Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos o
 | PUT | `/tasks/{id}` | Sí | Cambia o quita (`null`) la hora del recordatorio (404 si no existe, es ajena o está archivada) |
 | DELETE | `/tasks/{id}` | Sí | Archiva la tarea y conserva su historial (204) |
 | PUT | `/tasks/{id}/progress` | Sí | Guarda el progreso de un día (`day`, `progress` de 0 a la meta); `day` debe estar a ±1 día de la fecha UTC del servidor |
+| GET | `/tasks/stats?day=AAAA-MM-DD` | Sí | Cumplimiento de los 7 días que terminan en `day` (fecha local de la persona, a ±1 día de la fecha UTC; 422 si no): por día `active` y `completed`, promedio de las tareas con contador y el mejor día (D-28). Aplica las mismas reglas de visibilidad que `GET /tasks` |
 | POST | `/chat` | Sí | Retrieval + Gemini (con personalización) en una conversación, nueva o existente; persiste ambos mensajes de forma atómica. Devuelve `sources` (título, organización, URL, autores, año, DOI y páginas recuperadas) y las guarda con el mensaje del asistente |
 | GET | `/chat/conversations` | Sí | Lista las conversaciones del usuario, más reciente primero |
 | GET | `/chat/conversations/{id}/messages` | Sí | Mensajes de una conversación propia, orden cronológico; cada uno trae sus `sources` (lista vacía si no tiene) (404 si no existe o es de otro usuario) |
