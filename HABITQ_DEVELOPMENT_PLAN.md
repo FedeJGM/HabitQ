@@ -77,7 +77,7 @@ Fuentes verificables
 - Índice HabitQ.
 - Dashboards.
 - Gráficos de progreso.
-- Estadísticas avanzadas.
+- Estadísticas avanzadas. *(Actualización 2026-10-21: siguen fuera las estadísticas avanzadas, los dashboards y la evolución de hábitos. Se incluyó una pestaña con el cumplimiento de las tareas de los últimos 7 días y un resumen de solo lectura del cuestionario; ver D-28.)*
 - Gamificación.
 - Puntos.
 - Logros.

@@ -76,7 +76,7 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Consecuencias:** cualquier otro mockup en `Diseño/` debe revisarse con el mismo criterio antes de implementarlo — puede reflejar una exploración visual anterior al recorte de alcance del MVP.
 
-**Actualización (2026-10-15):** la pestaña «Actividad» del mockup se implementó después, limitada a un checklist diario y sin gamificación ni estadísticas (D-23). Lo demás de esta decisión sigue vigente.
+**Actualización (2026-10-15):** la pestaña «Actividad» del mockup se implementó después, limitada a un checklist diario y sin gamificación ni estadísticas (D-23). Lo demás de esta decisión sigue vigente. **Actualización (2026-10-21):** la ausencia de un tab de estadísticas se reabrió después en D-28.
 
 ---
 
@@ -379,3 +379,25 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 - Un volumen de Docker nuevo arranca vacío: los datos de un PostgreSQL local hay que copiarlos (`pg_dump` → `psql`) o volver a ingerir los PDFs.
 
 **Plan B para la presentación:** `adb reverse` por cable (guía local, secciones 1 a 7), y enviar una pregunta de calentamiento al chat antes de empezar para que el modelo ya esté cargado.
+
+---
+
+## D-28 — Excepción al alcance y al freeze: pestaña de Estadísticas (últimos 7 días)
+
+**Contexto:** el plan deja fuera "Dashboards, Gráficos de progreso, Estadísticas avanzadas" (sección 2) y D-07 mantuvo la app sin tab de estadísticas. El cierre de funcionalidades del 11 de octubre ya se reabrió una vez con aprobación explícita (D-23). La única serie temporal real que guarda la app es `task_progress` (progreso por tarea y día); `habit_records` se edita en sitio con `PUT /habits/{id}`, así que no conserva historia y no sirve para mostrar evolución.
+
+**Decisión (2026-10-21):** se reabre el alcance, con aprobación explícita de la persona responsable del proyecto, para una quinta pestaña **Estadísticas** (Inicio, Actividad, Estadísticas, Chat, Perfil) con un periodo fijo: los últimos 7 días, terminando en el día local de la persona.
+- **Cumplimiento por día:** tareas completadas (`progress >= target`) sobre tareas activas ese día, en barras. Las reglas de qué tarea cuenta ese día son las de `GET /tasks?day=` (una tarea archivada solo cuenta si ese día tiene progreso mayor que 0).
+- **Promedio de contadores y mejor día:** promedio diario de cada tarea con contador y el día de la ventana con mayor cumplimiento (empate: el más reciente; sin tareas: ninguno).
+- **Resumen de hábitos:** lista de solo lectura por dominio con las respuestas actuales del cuestionario, sin evolución ni valoración (sin semáforo). Reutiliza `GET /habits` y las etiquetas de `habit_questions.dart`; no hay endpoint nuevo.
+- **Endpoint nuevo `GET /tasks/stats?day=AAAA-MM-DD`:** el servidor calcula los 7 días con una sola consulta por rango y aplica la misma tolerancia de fecha local de D-24 (±1 día respecto de la fecha UTC). No hay tablas ni migraciones nuevas.
+- **Gráficos con `fl_chart`** (primera dependencia de gráficos de la app).
+- **Sin datos:** mensaje vacío con botón hacia Actividad; el resumen de hábitos se muestra igual si ya respondió el cuestionario.
+
+**Sigue fuera del MVP:** rachas, puntos, logros, semáforos o juicios de salud, evolución de hábitos, rangos navegables (semanas anteriores, mes) y estadísticas del chat.
+
+**Alternativas descartadas:** (a) siete llamadas a `GET /tasks?day=` desde la app: siete peticiones por apertura y la lógica de cálculo repetida en el celular; (b) `CustomPaint` propio o solo barras de progreso con widgets: menos dependencias pero más código de dibujo a mantener y probar; (c) selector semana/mes o rango navegable: más pantalla y más pruebas para un MVP; (d) reemplazar Perfil en la barra: cambia un flujo existente, y Material 3 admite hasta cinco destinos.
+
+**Reversión:** no hay migraciones, así que la base de datos no cambia. La etiqueta `v-pre-stats` marca el estado anterior de `develop`. El trabajo se entrega en dos PRs (backend y documentación; después app móvil) para poder revertir la interfaz sin retirar el endpoint.
+
+**Límite conocido:** el cálculo es sobre las tareas que la persona activó, no sobre un objetivo de salud. Un 100 % significa que cumplió lo que eligió, no que sus hábitos sean saludables.
