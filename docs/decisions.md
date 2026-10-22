@@ -401,3 +401,18 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Reversión:** no hay migraciones, así que la base de datos no cambia. La etiqueta `v-pre-stats` marca el estado anterior de `develop`. El trabajo se entrega en dos PRs (backend y documentación; después app móvil) para poder revertir la interfaz sin retirar el endpoint.
 
 **Límite conocido:** el cálculo es sobre las tareas que la persona activó, no sobre un objetivo de salud. Un 100 % significa que cumplió lo que eligió, no que sus hábitos sean saludables.
+
+---
+
+## D-29 — Identidad de la app en Android: nombre «HabitQ» y logo HQ
+
+**Contexto:** el proyecto Flutter se creó con el nombre del paquete (`mobile`), así que el teléfono mostraba «mobile» bajo el ícono genérico de Flutter, y las notificaciones de los recordatorios (D-25) usaban ese mismo ícono. Los commits `75d8eb3` y `c06209a` (2026-10-16) lo corrigieron sin dejar una decisión escrita.
+
+**Decisión:**
+- **Nombre visible:** `android:label="HabitQ"` en `AndroidManifest.xml`. El nombre del paquete Dart (`mobile`) no cambia, porque renombrarlo toca todos los `import` del proyecto sin ningún beneficio para quien usa la app.
+- **Ícono del lanzador:** ícono adaptativo (`mipmap-anydpi-v26/ic_launcher.xml`) con el logo HQ como primer plano sobre fondo blanco (`ic_launcher_background`), y los PNG de cada densidad (`mdpi` a `xxxhdpi`) para versiones anteriores a Android 8.
+- **Ícono de las notificaciones:** una silueta blanca propia (`drawable-*/ic_stat_hq.png`) que se pasa a `AndroidInitializationSettings` en `LocalNotificationGateway`. Android solo usa la transparencia (alfa) de los íconos de la barra de estado, así que el ícono de color del lanzador se vería como un cuadrado sólido.
+
+**Alcance:** solo Android. No se tocaron los recursos de iOS ni los de web/escritorio, porque el proyecto se desarrolla y prueba en Android (D-27).
+
+**Pendiente:** los PNG de ícono se generaron a partir del logo HQ; el archivo fuente del logo no está en el repositorio (`Diseño/` solo contiene los bocetos de pantallas). Si hay que regenerarlos, hace falta el original.
