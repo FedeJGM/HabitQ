@@ -132,7 +132,7 @@ La barra inferior tiene cuatro pestañas: Inicio, **Actividad**, Chat y Perfil (
 
 Todo widget con lógica async (`OnboardingScreen`, `HabitsScreen`, `ProfileScreen`, `HomeScreen`, `ConsentScreen`, etc.) acepta su servicio por constructor (`this.habitsService`, `this.profileService`, ...) con fallback a la construcción real (`?? HabitsService()`). Esto permite testear cada pantalla con un fake sin tocar red ni almacenamiento real.
 
-**Excepción deliberada:** código que depende directamente de `FlutterSecureStorage` (`AuthService.signOut()`, `TokenStorage`, `ConsentStorage`) no tiene test unitario que ejercite su cuerpo real. Se comprobó empíricamente que una llamada real a `FlutterSecureStorage` sin mock **cuelga indefinidamente** un `testWidgets()` (no lanza excepción). Estas piezas solo se verifican vía los fakes que las sobreescriben por completo en los tests de las pantallas que las consumen.
+**Excepción deliberada:** código que depende directamente de `FlutterSecureStorage` (`TokenStorage`, `ConsentStorage`) no tiene test unitario que ejercite su cuerpo real. `AuthService.signOut()` sí se testea, porque `AuthService` recibe `GoogleSignIn` y el almacenamiento por constructor. Se comprobó empíricamente que una llamada real a `FlutterSecureStorage` sin mock **cuelga indefinidamente** un `testWidgets()` (no lanza excepción). Estas piezas solo se verifican vía los fakes que las sobreescriben por completo en los tests de las pantallas que las consumen.
 
 ## Administración de la base de conocimiento
 
