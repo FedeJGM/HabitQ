@@ -157,8 +157,9 @@ class AppTheme {
           const TextStyle(
             fontFamily: fontFamily,
             fontWeight: FontWeight.w500,
-            fontSize: 12,
-            letterSpacing: 0.5,
+            // 11 sp so "Estadísticas" fits its slot with five tabs on a 360 dp phone.
+            fontSize: 11,
+            letterSpacing: 0.2,
             color: AppColors.textPrimary,
           ),
         ),

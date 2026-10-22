@@ -12,6 +12,7 @@ import 'features/home/home_screen.dart';
 import 'features/onboarding/onboarding_habits_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'features/profile/profile_screen.dart';
+import 'features/stats/stats_screen.dart';
 
 /// Central route table. Add new named routes here as each feature screen
 /// lands, instead of scattering Navigator.push calls with inline builders.
@@ -22,6 +23,7 @@ class AppRoutes {
   static const onboardingHabits = '/onboarding/habits';
   static const home = '/home';
   static const activity = '/activity';
+  static const stats = '/stats';
   static const habits = '/habits';
   static const profile = '/profile';
   static const chat = '/chat';
@@ -35,6 +37,7 @@ class AppRoutes {
         onboardingHabits: (_) => const OnboardingHabitsScreen(),
         home: (_) => const HomeScreen(),
         activity: (_) => const ActivityScreen(),
+        stats: (_) => const StatsScreen(),
         habits: (_) => const HabitsScreen(),
         profile: (_) => ProfileScreen(authService: AuthService()),
         chat: (_) => const ChatScreen(),

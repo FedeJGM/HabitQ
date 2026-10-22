@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-enum HabitQTab { home, activity, chat, profile }
+enum HabitQTab { home, activity, stats, chat, profile }
 
-/// Bottom navigation (Inicio / Actividad / Chat / Perfil) with the lilac
+/// Bottom navigation (Inicio / Actividad / Estadísticas / Chat / Perfil) with the lilac
 /// active pill (from `NavigationBarTheme.indicatorColor`).
 class HabitQBottomNav extends StatelessWidget {
   const HabitQBottomNav({super.key, required this.current, required this.onSelected});
@@ -29,6 +29,11 @@ class HabitQBottomNav extends StatelessWidget {
             icon: Icon(Icons.task_alt_outlined),
             selectedIcon: Icon(Icons.task_alt),
             label: 'Actividad',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
+            label: 'Estadísticas',
           ),
           NavigationDestination(
             icon: Icon(Icons.insights_outlined),
