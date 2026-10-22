@@ -211,7 +211,7 @@ class _StatsScreenState extends State<StatsScreen> {
       alignment: BarChartAlignment.spaceAround,
       gridData: FlGridData(
         drawVerticalLine: false,
-        horizontalInterval: 50,
+        horizontalInterval: 25,
         getDrawingHorizontalLine: (_) => const FlLine(color: AppColors.surfaceMuted, strokeWidth: 1),
       ),
       borderData: FlBorderData(show: false),
@@ -233,7 +233,7 @@ class _StatsScreenState extends State<StatsScreen> {
           sideTitles: SideTitles(
             showTitles: true,
             reservedSize: 48,
-            interval: 50,
+            interval: 25,
             getTitlesWidget: (value, meta) => SideTitleWidget(
               meta: meta,
               // One line always: "100 %" must not drop the percent sign below.

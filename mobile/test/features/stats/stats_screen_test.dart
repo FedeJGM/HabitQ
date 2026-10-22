@@ -172,13 +172,13 @@ void main() {
     expect(find.text('DOM'), findsOneWidget);
   });
 
-  testWidgets('labels the vertical axis with 0, 50 and 100 percent', (tester) async {
+  testWidgets('labels the vertical axis every 25 percent', (tester) async {
     await pumpScreen(tester, stats: _FakeStatsService());
 
     final chart = find.byKey(const ValueKey('stats-chart'));
-    expect(find.descendant(of: chart, matching: find.text('0 %')), findsOneWidget);
-    expect(find.descendant(of: chart, matching: find.text('50 %')), findsOneWidget);
-    expect(find.descendant(of: chart, matching: find.text('100 %')), findsOneWidget);
+    for (final label in ['0 %', '25 %', '50 %', '75 %', '100 %']) {
+      expect(find.descendant(of: chart, matching: find.text(label)), findsOneWidget, reason: label);
+    }
   });
 
   testWidgets('keeps each axis label on a single line, the percent sign included', (tester) async {
@@ -188,8 +188,9 @@ void main() {
     double heightOf(String label) =>
         tester.getSize(find.descendant(of: chart, matching: find.text(label))).height;
 
-    expect(heightOf('100 %'), heightOf('0 %'));
-    expect(heightOf('50 %'), heightOf('0 %'));
+    for (final label in ['25 %', '50 %', '75 %', '100 %']) {
+      expect(heightOf(label), heightOf('0 %'), reason: label);
+    }
   });
 
   testWidgets('summarizes today in tasks', (tester) async {
