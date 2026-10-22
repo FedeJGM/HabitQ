@@ -409,7 +409,7 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Contexto:** el proyecto Flutter se creó con el nombre del paquete (`mobile`), así que el teléfono mostraba «mobile» bajo el ícono genérico de Flutter, y las notificaciones de los recordatorios (D-25) usaban ese mismo ícono. Los commits `75d8eb3` y `c06209a` (2026-10-16) lo corrigieron sin dejar una decisión escrita.
 
 **Decisión:**
-- **Nombre visible:** `android:label="HabitQ"` en `AndroidManifest.xml`. El nombre del paquete Dart (`mobile`) no cambia, porque renombrarlo toca todos los `import` del proyecto sin ningún beneficio para quien usa la app.
+- **Nombre visible:** `android:label="HabitQ"` en `AndroidManifest.xml`. El nombre del paquete Dart (`mobile`) no cambia: los `import` del proyecto dependen de él y la etiqueta del manifiesto es lo único que ve la persona.
 - **Ícono del lanzador:** ícono adaptativo (`mipmap-anydpi-v26/ic_launcher.xml`) con el logo HQ como primer plano sobre fondo blanco (`ic_launcher_background`), y los PNG de cada densidad (`mdpi` a `xxxhdpi`) para versiones anteriores a Android 8.
 - **Ícono de las notificaciones:** una silueta blanca propia (`drawable-*/ic_stat_hq.png`) que se pasa a `AndroidInitializationSettings` en `LocalNotificationGateway`. Android solo usa la transparencia (alfa) de los íconos de la barra de estado, así que el ícono de color del lanzador se vería como un cuadrado sólido.
 
