@@ -232,11 +232,17 @@ class _StatsScreenState extends State<StatsScreen> {
         leftTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: 44,
+            reservedSize: 48,
             interval: 50,
             getTitlesWidget: (value, meta) => SideTitleWidget(
               meta: meta,
-              child: Text('${value.round()} %', style: _mutedStyle.copyWith(fontSize: 11)),
+              // One line always: "100 %" must not drop the percent sign below.
+              child: Text(
+                '${value.round()} %',
+                maxLines: 1,
+                softWrap: false,
+                style: _mutedStyle.copyWith(fontSize: 11),
+              ),
             ),
           ),
         ),

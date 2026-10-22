@@ -181,6 +181,17 @@ void main() {
     expect(find.descendant(of: chart, matching: find.text('100 %')), findsOneWidget);
   });
 
+  testWidgets('keeps each axis label on a single line, the percent sign included', (tester) async {
+    await pumpScreen(tester, stats: _FakeStatsService());
+
+    final chart = find.byKey(const ValueKey('stats-chart'));
+    double heightOf(String label) =>
+        tester.getSize(find.descendant(of: chart, matching: find.text(label))).height;
+
+    expect(heightOf('100 %'), heightOf('0 %'));
+    expect(heightOf('50 %'), heightOf('0 %'));
+  });
+
   testWidgets('summarizes today in tasks', (tester) async {
     await pumpScreen(tester, stats: _FakeStatsService());
 
