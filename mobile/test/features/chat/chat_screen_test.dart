@@ -117,6 +117,48 @@ void main() {
     expect(find.textContaining('CDC'), findsOneWidget);
   });
 
+  testWidgets('renders Markdown in the assistant reply without literal asterisks',
+      (tester) async {
+    final fakeService = _FakeChatService(responses: [
+      _turn(
+        conversationId: 'c1',
+        content: '* **Actividad física y ejercicio:** caminá 30 minutos.\n'
+            '* Dormí entre 7 y 9 horas.',
+      ),
+    ]);
+    await tester.pumpWidget(buildApp(fakeService));
+
+    await tester.enterText(find.byType(TextField), 'Dame consejos');
+    await tester.pump();
+    await tester.tap(_sendButton());
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Actividad física y ejercicio', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.textContaining('*', findRichText: true), findsNothing);
+  });
+
+  testWidgets('scrolls to the start of a long assistant reply, not its end', (tester) async {
+    final paragraphs = [for (var i = 1; i <= 40; i++) 'Parrafo $i de la respuesta.'];
+    final fakeService = _FakeChatService(responses: [
+      _turn(conversationId: 'c1', content: paragraphs.join('\n\n')),
+    ]);
+    await tester.pumpWidget(buildApp(fakeService));
+
+    await tester.enterText(find.byType(TextField), 'Dame una respuesta larga');
+    await tester.pump();
+    await tester.tap(_sendButton());
+    await tester.pumpAndSettle();
+
+    final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final firstTop =
+        tester.getTopLeft(find.textContaining('Parrafo 1 de', findRichText: true)).dy;
+    expect(firstTop, greaterThanOrEqualTo(0));
+    expect(firstTop, lessThan(screenHeight));
+  });
+
   testWidgets('shows a full reference list under the assistant reply', (tester) async {
     final fakeService = _FakeChatService(responses: [
       _turn(

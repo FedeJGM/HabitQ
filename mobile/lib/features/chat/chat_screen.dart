@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_routes.dart';
@@ -45,6 +46,8 @@ class _ChatScreenState extends State<ChatScreen> {
   late final UrlOpener _urlOpener;
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  final _replyKey = GlobalKey();
+  int? _replyIndex;
   final List<_DisplayMessage> _messages = [];
   String? _conversationId;
   bool _isSending = false;
@@ -114,6 +117,17 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  /// Aligns the top of the newest assistant reply with the top of the list so
+  /// the user reads it from the first paragraph instead of landing on its end.
+  void _scrollToReplyStart() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final replyContext = _replyKey.currentContext;
+      if (replyContext != null) {
+        Scrollable.ensureVisible(replyContext, alignment: 0);
+      }
+    });
+  }
+
   Future<void> _handleSend() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _isSending) return;
@@ -126,11 +140,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _controller.clear();
     _scrollToBottom();
 
+    var replied = false;
     try {
       final turn = await _chatService.sendMessage(text, conversationId: _conversationId);
       if (!mounted) return;
       setState(() {
         _conversationId = turn.conversationId;
+        _replyIndex = _messages.length;
+        replied = true;
         _messages.add(
           _DisplayMessage(
             role: turn.message.role,
@@ -145,7 +162,11 @@ class _ChatScreenState extends State<ChatScreen> {
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
-    _scrollToBottom();
+    if (replied) {
+      _scrollToReplyStart();
+    } else {
+      _scrollToBottom();
+    }
   }
 
   Future<void> _openLink(Uri uri) async {
@@ -211,13 +232,25 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              message.content,
-              style: TextStyle(
-                fontSize: 13,
-                color: isUser ? Colors.white : AppColors.textPrimary,
+            if (isUser)
+              Text(
+                message.content,
+                style: const TextStyle(fontSize: 13, color: Colors.white),
+              )
+            else
+              MarkdownBody(
+                data: message.content,
+                styleSheet: MarkdownStyleSheet(
+                  p: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                  listBullet: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                  strong: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                  blockSpacing: 6,
+                ),
               ),
-            ),
             if (message.sources.isNotEmpty) ...[
               const SizedBox(height: 8),
               const Text(
@@ -306,7 +339,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                   ),
                                 );
                               }
-                              return _buildBubble(_messages[index]);
+                              final bubble = _buildBubble(_messages[index]);
+                              return index == _replyIndex
+                                  ? KeyedSubtree(key: _replyKey, child: bubble)
+                                  : bubble;
                             },
                           ),
                   ),
