@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
-import '../../core/theme/app_theme.dart';
 import '../habits/habit_questions.dart';
+import '../habits/habit_wizard.dart';
 import '../habits/habits_service.dart';
 import 'onboarding_service.dart';
 
 /// Per-domain habit questions step of onboarding, following the perfil
-/// básico step. Answers become one habit_records row each via POST /habits.
+/// básico step, asked one question at a time. Answers become one
+/// habit_records row each via POST /habits, all at once when the user
+/// finishes (nothing is stored while they are still answering).
 class OnboardingHabitsScreen extends StatefulWidget {
   const OnboardingHabitsScreen({super.key, this.habitsService, this.onboardingService});
 
@@ -22,7 +24,7 @@ class OnboardingHabitsScreen extends StatefulWidget {
 class _OnboardingHabitsScreenState extends State<OnboardingHabitsScreen> {
   late final HabitsService _habitsService;
   late final OnboardingService _onboardingService;
-  final Map<String, String> _answers = {};
+  Map<String, String> _answers = {};
   bool _isSaving = false;
   String? _errorMessage;
 
@@ -34,6 +36,11 @@ class _OnboardingHabitsScreenState extends State<OnboardingHabitsScreen> {
     super.initState();
     _habitsService = widget.habitsService ?? HabitsService();
     _onboardingService = widget.onboardingService ?? OnboardingService();
+  }
+
+  Future<bool> _handleSelect(HabitQuestion question, String value) async {
+    setState(() => _answers = {..._answers, question.key: value});
+    return true;
   }
 
   Future<void> _handleContinue() async {
@@ -62,7 +69,7 @@ class _OnboardingHabitsScreenState extends State<OnboardingHabitsScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed(AppRoutes.home);
     } on ApiException catch (e) {
-      setState(() => _errorMessage = e.message);
+      if (mounted) setState(() => _errorMessage = e.message);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -72,51 +79,13 @@ class _OnboardingHabitsScreenState extends State<OnboardingHabitsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Tus hábitos')),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final section in habitDomainSections) ...[
-                Text(section.title, style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 12),
-                for (final question in section.questions) ...[
-                  Text(question.prompt, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: question.options.map((option) {
-                      return ChoiceChip(
-                        key: ValueKey('${question.key}:${option.value}'),
-                        label: Text(option.label),
-                        selected: _answers[question.key] == option.value,
-                        onSelected: (_) =>
-                            setState(() => _answers[question.key] = option.value),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ],
-              if (_errorMessage != null) ...[
-                Text(_errorMessage!, style: const TextStyle(color: AppColors.error)),
-                const SizedBox(height: 16),
-              ],
-              ElevatedButton(
-                onPressed: _isSaving ? null : _handleContinue,
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('Finalizar'),
-              ),
-            ],
-          ),
-        ),
+      body: HabitWizard(
+        answers: _answers,
+        errorMessage: _errorMessage,
+        isFinishing: _isSaving,
+        finishLabel: 'Finalizar',
+        onSelect: _handleSelect,
+        onFinish: _handleContinue,
       ),
     );
   }

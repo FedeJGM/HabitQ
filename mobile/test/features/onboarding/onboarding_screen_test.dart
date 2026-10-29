@@ -36,6 +36,13 @@ void main() {
     );
   }
 
+  testWidgets('shows which step of the onboarding this is', (tester) async {
+    await tester.pumpWidget(buildApp(_FakeProfileService()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Paso 1 de 2'), findsOneWidget);
+  });
+
   testWidgets('shows a validation message when nothing is selected', (tester) async {
     final fakeService = _FakeProfileService();
     await tester.pumpWidget(buildApp(fakeService));

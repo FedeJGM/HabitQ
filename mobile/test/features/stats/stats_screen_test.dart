@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/app_routes.dart';
 import 'package:mobile/core/networking/api_client.dart';
+import 'package:mobile/core/widgets/empty_state.dart';
+import 'package:mobile/core/widgets/error_notice.dart';
+import 'package:mobile/core/widgets/skeleton.dart';
 import 'package:mobile/features/auth/auth_service.dart';
 import 'package:mobile/features/habits/habits_service.dart';
 import 'package:mobile/features/stats/stats_screen.dart';
@@ -151,8 +154,10 @@ void main() {
       ),
     );
 
-    expect(find.byType(CircularProgressIndicator), findsWidgets);
+    expect(find.byType(SkeletonCard), findsWidgets);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.pumpAndSettle();
+    expect(find.byType(SkeletonCard), findsNothing);
   });
 
   testWidgets('asks for the window ending on the local day of the user', (tester) async {
@@ -197,6 +202,33 @@ void main() {
     await pumpScreen(tester, stats: _FakeStatsService());
 
     expect(find.text('Hoy: 1 de 3 tareas'), findsOneWidget);
+  });
+
+  testWidgets('adds one neutral sentence about the week', (tester) async {
+    await pumpScreen(tester, stats: _FakeStatsService());
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('stats-insight')),
+        matching: find.text('Completaste el 43 % de las tareas que elegiste esta semana.'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('has no weekly sentence when there are no tasks', (tester) async {
+    await pumpScreen(tester, stats: _FakeStatsService(stats: _emptyStats()));
+
+    expect(find.byKey(const ValueKey('stats-insight')), findsNothing);
+  });
+
+  testWidgets('reads the chart aloud for screen readers', (tester) async {
+    final handle = tester.ensureSemantics();
+    await pumpScreen(tester, stats: _FakeStatsService());
+
+    expect(find.bySemanticsLabel(RegExp('^Cumplimiento por día de los últimos 7 días')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('miércoles 14: 3 de 3')), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('shows the best day with its weekday name', (tester) async {
@@ -245,6 +277,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Activity page'), findsOneWidget);
+  });
+
+  testWidgets('the empty state is the shared EmptyState block', (tester) async {
+    await pumpScreen(tester, stats: _FakeStatsService(stats: _emptyStats()));
+
+    expect(find.byType(EmptyState), findsOneWidget);
+  });
+
+  testWidgets('a statistics failure offers Reintentar and recovers', (tester) async {
+    final stats = _FakeStatsService(fetchError: ApiException('Algo salió mal'));
+    await pumpScreen(tester, stats: stats);
+
+    expect(find.byType(ErrorNotice), findsOneWidget);
+
+    stats.fetchError = null;
+    await tester.tap(find.text('Reintentar'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ErrorNotice), findsNothing);
+    expect(find.byKey(const ValueKey('stats-chart')), findsOneWidget);
+    expect(stats.requestedDays, hasLength(2));
+  });
+
+  testWidgets('a connection failure suggests checking the network', (tester) async {
+    await pumpScreen(tester, stats: _FakeStatsService(fetchError: ApiConnectionException()));
+
+    expect(find.textContaining('Revisa tu conexión'), findsOneWidget);
   });
 
   testWidgets('shows the backend error message and no chart when the statistics fail', (tester) async {

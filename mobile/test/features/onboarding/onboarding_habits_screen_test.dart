@@ -72,29 +72,42 @@ void main() {
     'frequency': 'rarely',
   };
 
-  // The questionnaire is taller than the test viewport, so each target must
-  // be scrolled into view before tapping it.
-  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
-    await tester.ensureVisible(finder);
-    await tester.pumpAndSettle();
-    await tester.tap(finder);
-    await tester.pump();
-  }
-
+  /// Answers every question, one step at a time (each pick advances by itself).
   Future<void> answerAll(WidgetTester tester) async {
     for (final entry in answersByQuestion.entries) {
-      await tapVisible(tester, find.byKey(ValueKey('${entry.key}:${entry.value}')));
+      await tester.tap(find.byKey(ValueKey('${entry.key}:${entry.value}')));
+      await tester.pumpAndSettle();
     }
   }
 
-  testWidgets('shows a validation message when not all questions are answered', (tester) async {
+  testWidgets('asks one question at a time, starting with sleep', (tester) async {
+    await tester.pumpWidget(buildApp(_FakeHabitsService(), _FakeOnboardingService()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tus hábitos'), findsOneWidget);
+    expect(find.text('Pregunta 1 de 9'), findsOneWidget);
+    expect(find.text('¿Cuántas horas duermes normalmente?'), findsOneWidget);
+    expect(find.text('¿Con qué frecuencia consumes frutas o verduras?'), findsNothing);
+  });
+
+  testWidgets('cannot move forward without answering the question', (tester) async {
+    await tester.pumpWidget(buildApp(_FakeHabitsService(), _FakeOnboardingService()));
+    await tester.pumpAndSettle();
+
+    final next = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Siguiente'));
+    expect(next.onPressed, isNull);
+  });
+
+  testWidgets('nothing is saved until the end', (tester) async {
     final fakeHabits = _FakeHabitsService();
     final fakeOnboarding = _FakeOnboardingService();
     await tester.pumpWidget(buildApp(fakeHabits, fakeOnboarding));
 
-    await tapVisible(tester, find.text('Finalizar'));
+    await tester.tap(find.byKey(const ValueKey('hours:less_5')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('screen_before_bed:never')));
+    await tester.pumpAndSettle();
 
-    expect(find.text('Responde todas las preguntas para continuar.'), findsOneWidget);
     expect(fakeHabits.capturedAnswers, isNull);
     expect(fakeOnboarding.completeCalled, isFalse);
   });
@@ -105,16 +118,40 @@ void main() {
     await tester.pumpWidget(buildApp(fakeHabits, fakeOnboarding));
 
     await answerAll(tester);
-    await tapVisible(tester, find.text('Finalizar'));
+    expect(find.text('¡Listo!'), findsOneWidget);
+    await tester.tap(find.text('Finalizar'));
     await tester.pumpAndSettle();
 
     expect(fakeHabits.capturedAnswers, hasLength(9));
-    final sleepAnswer =
-        fakeHabits.capturedAnswers!.firstWhere((a) => a.key == 'hours');
+    final sleepAnswer = fakeHabits.capturedAnswers!.firstWhere((a) => a.key == 'hours');
     expect(sleepAnswer.domain, 'sleep');
     expect(sleepAnswer.value, 'less_5');
     expect(fakeOnboarding.completeCalled, isTrue);
     expect(find.text('Home'), findsOneWidget);
+  });
+
+  testWidgets('going back and changing an answer submits the new one', (tester) async {
+    final fakeHabits = _FakeHabitsService();
+    final fakeOnboarding = _FakeOnboardingService();
+    await tester.pumpWidget(buildApp(fakeHabits, fakeOnboarding));
+    await answerAll(tester);
+
+    for (var i = 0; i < 9; i++) {
+      await tester.tap(find.text('Atrás'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Pregunta 1 de 9'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('hours:more_8')));
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 8; i++) {
+      await tester.tap(find.text('Siguiente'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('¡Listo!'), findsOneWidget);
+    await tester.tap(find.text('Finalizar'));
+    await tester.pumpAndSettle();
+
+    expect(fakeHabits.capturedAnswers!.firstWhere((a) => a.key == 'hours').value, 'more_8');
   });
 
   testWidgets('shows the backend error message when submitting habits fails', (tester) async {
@@ -123,11 +160,12 @@ void main() {
     await tester.pumpWidget(buildApp(fakeHabits, fakeOnboarding));
 
     await answerAll(tester);
-    await tapVisible(tester, find.text('Finalizar'));
+    await tester.tap(find.text('Finalizar'));
     await tester.pumpAndSettle();
 
     expect(find.text('Ocurrió un error inesperado.'), findsOneWidget);
     expect(fakeOnboarding.completeCalled, isFalse);
+    expect(find.text('Home'), findsNothing);
   });
 
   testWidgets('shows the backend error message when completing onboarding fails', (tester) async {
@@ -137,10 +175,26 @@ void main() {
     await tester.pumpWidget(buildApp(fakeHabits, fakeOnboarding));
 
     await answerAll(tester);
-    await tapVisible(tester, find.text('Finalizar'));
+    await tester.tap(find.text('Finalizar'));
     await tester.pumpAndSettle();
 
     expect(find.text('No se pudo completar el onboarding.'), findsOneWidget);
     expect(find.text('Home'), findsNothing);
+  });
+
+  testWidgets('after a failure the user can try Finalizar again', (tester) async {
+    final fakeHabits = _FakeHabitsService(error: ApiException('Ocurrió un error inesperado.'));
+    final fakeOnboarding = _FakeOnboardingService();
+    await tester.pumpWidget(buildApp(fakeHabits, fakeOnboarding));
+    await answerAll(tester);
+    await tester.tap(find.text('Finalizar'));
+    await tester.pumpAndSettle();
+
+    fakeHabits.error = null;
+    await tester.tap(find.text('Finalizar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Ocurrió un error inesperado.'), findsNothing);
   });
 }

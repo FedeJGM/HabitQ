@@ -1,28 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../activity/reminder_service.dart';
+import '../activity/tasks_service.dart';
 import '../auth/auth_service.dart';
 import '../chat/chat_service.dart';
+import '../../core/widgets/fade_slide_in.dart';
 import '../../core/widgets/habitq_bottom_nav.dart';
 import '../../core/widgets/habitq_card.dart';
 import '../../core/widgets/habitq_shell.dart';
 import '../auth/user.dart';
+import 'today_tasks_card.dart';
 
-/// Landing tab after login/onboarding: greeting card plus entry points to
-/// Chat and Mis hábitos (Perfil lives in the bottom navigation). The daily
-/// checklist is not here: it lives in the Actividad tab.
+/// Landing tab after login/onboarding: greeting card, today's tasks (a
+/// read-only summary that opens the Actividad tab, where they are completed)
+/// and entry points to Chat and Mis hábitos (Perfil lives in the bottom
+/// navigation).
 ///
 /// Chat entry: a single "Chat con HabitQ" card until the user has a past
 /// conversation; from then on "Continuar conversación" (most recent one) and
 /// "Nuevo chat con HabitQ".
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.authService, this.chatService, this.now});
+  const HomeScreen({super.key, this.authService, this.chatService, this.tasksService, this.now});
 
   final AuthService? authService;
   final ChatService? chatService;
+  final TasksService? tasksService;
 
   /// Clock used to pick the greeting; injectable so tests can fix the hour.
   final DateTime Function()? now;
@@ -34,19 +40,54 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late final AuthService _authService;
   late final ChatService _chatService;
+  late final TasksService _tasksService;
   HabitQUser? _user;
   bool _isLoadingUser = true;
   String? _errorMessage;
   ConversationSummary? _latestConversation;
+  List<DayTask> _tasks = const [];
+  bool _isLoadingTasks = true;
+  String? _tasksError;
+  bool _tasksErrorIsConnection = false;
 
   @override
   void initState() {
     super.initState();
     _authService = widget.authService ?? AuthService();
     _chatService = widget.chatService ?? ChatService();
+    _tasksService = widget.tasksService ?? TasksService();
     _loadUser();
     _loadLatestConversation();
+    _loadTasks();
   }
+
+  /// Today's checklist. A failure only affects its card: the greeting and the
+  /// chat entries keep working.
+  Future<void> _loadTasks() async {
+    setState(() {
+      _isLoadingTasks = true;
+      _tasksError = null;
+    });
+    final now = (widget.now ?? DateTime.now)();
+    try {
+      final tasks = await _tasksService.fetchTasks(DateTime(now.year, now.month, now.day));
+      if (!mounted) return;
+      setState(() {
+        // A removed task is only history: it never shows today.
+        _tasks = tasks.where((task) => !task.archived).toList();
+        _isLoadingTasks = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _tasksError = e.message;
+        _tasksErrorIsConnection = e is ApiConnectionException;
+        _isLoadingTasks = false;
+      });
+    }
+  }
+
+  void _openActivity() => Navigator.of(context).pushReplacementNamed(AppRoutes.activity);
 
   /// The backend returns conversations most recent first. If they cannot be
   /// loaded the home keeps the single "Chat con HabitQ" card: it still works.
@@ -99,44 +140,75 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _GreetingCard(
-              isLoading: _isLoadingUser,
-              errorMessage: _errorMessage,
-              userName: _user?.name,
-              isNight: _isNight((widget.now ?? DateTime.now)().hour),
+            FadeSlideIn(
+              child: _GreetingCard(
+                isLoading: _isLoadingUser,
+                errorMessage: _errorMessage,
+                userName: _user?.name,
+                isNight: _isNight((widget.now ?? DateTime.now)().hour),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FadeSlideIn(
+              key: const ValueKey('home-tasks'),
+              delay: const Duration(milliseconds: 40),
+              child: TodayTasksCard(
+                tasks: _tasks,
+                isLoading: _isLoadingTasks,
+                errorMessage: _tasksError,
+                isConnectionError: _tasksErrorIsConnection,
+                onOpen: _openActivity,
+                onRetry: _loadTasks,
+              ),
             ),
             const SizedBox(height: 24),
             if (_latestConversation case final latest?) ...[
-              _chatCard(
-                icon: Icons.forum_outlined,
-                title: 'Continuar conversación',
-                subtitle: _continueSubtitle(latest),
-                onTap: () => _openChat(conversationId: latest.id),
+              FadeSlideIn(
+                key: const ValueKey('home-continue'),
+                delay: const Duration(milliseconds: 80),
+                child: _chatCard(
+                  icon: Symbols.forum_rounded,
+                  title: 'Continuar conversación',
+                  subtitle: _continueSubtitle(latest),
+                  onTap: () => _openChat(conversationId: latest.id),
+                ),
               ),
               const SizedBox(height: 16),
-              _chatCard(
-                icon: Icons.chat_bubble_outline,
-                title: 'Nuevo chat con HabitQ',
-                subtitle: '¿Qué deseas preguntar?',
-                onTap: () => _openChat(),
+              FadeSlideIn(
+                key: const ValueKey('home-new-chat'),
+                delay: const Duration(milliseconds: 160),
+                child: _chatCard(
+                  icon: Symbols.chat_bubble_rounded,
+                  title: 'Nuevo chat con HabitQ',
+                  subtitle: '¿Qué deseas preguntar?',
+                  onTap: () => _openChat(),
+                ),
               ),
             ] else
-              _chatCard(
-                icon: Icons.chat_bubble_outline,
-                title: 'Chat con HabitQ',
-                subtitle: '¿Qué deseas preguntar?',
-                onTap: () => _openChat(),
+              FadeSlideIn(
+                key: const ValueKey('home-chat'),
+                delay: const Duration(milliseconds: 80),
+                child: _chatCard(
+                  icon: Symbols.chat_bubble_rounded,
+                  title: 'Chat con HabitQ',
+                  subtitle: '¿Qué deseas preguntar?',
+                  onTap: () => _openChat(),
+                ),
               ),
             const SizedBox(height: 16),
-            HabitQCard(
-              onTap: () => Navigator.of(context).pushNamed(AppRoutes.habits),
-              child: Row(
-                children: [
-                  const Icon(Icons.checklist, color: AppColors.primary, size: 30),
-                  const SizedBox(width: 16),
-                  const Expanded(child: Text('Mis hábitos', style: _cardTitle)),
-                  _arrowButton(),
-                ],
+            FadeSlideIn(
+              key: const ValueKey('home-habits'),
+              delay: const Duration(milliseconds: 240),
+              child: HabitQCard(
+                onTap: () => Navigator.of(context).pushNamed(AppRoutes.habits),
+                child: Row(
+                  children: [
+                    const Icon(Symbols.checklist_rounded, color: AppColors.primary, size: 30),
+                    const SizedBox(width: 16),
+                    const Expanded(child: Text('Mis hábitos', style: _cardTitle)),
+                    _arrowButton(),
+                  ],
+                ),
               ),
             ),
           ],
@@ -202,7 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
         border: Border.all(color: AppColors.primary, width: 1.5),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: const Icon(Icons.arrow_forward, size: 14, color: AppColors.textPrimary),
+      child: const Icon(Symbols.arrow_forward_rounded, size: 14, color: AppColors.textPrimary),
     );
   }
 }
@@ -227,9 +299,13 @@ class _GreetingCard extends StatelessWidget {
     final name = userName;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [AppColors.sky.withValues(alpha: 0.65), AppColors.skyLight],
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF79747E), width: 0.2),
+        border: Border.all(color: AppColors.skyDeep.withValues(alpha: 0.35), width: 0.6),
         boxShadow: AppShadows.card,
       ),
       child: ClipRRect(
@@ -245,7 +321,7 @@ class _GreetingCard extends StatelessWidget {
                     children: [
                       CircleAvatar(
                         radius: 20,
-                        backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                        backgroundColor: Colors.white,
                         child: Text(
                           _initials(name),
                           style: const TextStyle(
@@ -264,9 +340,9 @@ class _GreetingCard extends StatelessWidget {
               ),
               Container(
                 width: 86,
-                color: const Color(0xFFF4F5FC),
+                color: Colors.white.withValues(alpha: 0.55),
                 child: isNight
-                    ? const Icon(Icons.nights_stay, size: 44, color: AppColors.primary)
+                    ? const Icon(Symbols.nights_stay_rounded, size: 44, color: AppColors.skyDeep)
                     : Image.asset('assets/images/sun.png', fit: BoxFit.contain),
               ),
             ],

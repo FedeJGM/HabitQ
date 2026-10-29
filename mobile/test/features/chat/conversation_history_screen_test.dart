@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/app_routes.dart';
 import 'package:mobile/core/networking/api_client.dart';
+import 'package:mobile/core/widgets/empty_state.dart';
+import 'package:mobile/core/widgets/error_notice.dart';
+import 'package:mobile/core/widgets/skeleton.dart';
 import 'package:mobile/features/chat/chat_service.dart';
 import 'package:mobile/features/chat/conversation_history_screen.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 class _FakeChatService implements ChatService {
   _FakeChatService({this.conversations, this.fetchError, this.deleteError});
@@ -71,6 +75,44 @@ void main() {
     expect(find.textContaining('2 sep'), findsOneWidget);
   });
 
+  testWidgets('the empty state is the shared EmptyState block', (tester) async {
+    await tester.pumpWidget(buildApp(_FakeChatService(conversations: [])));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(EmptyState), findsOneWidget);
+  });
+
+  testWidgets('shows skeletons, not a spinner, while loading', (tester) async {
+    await tester.pumpWidget(buildApp(_FakeChatService(conversations: [])));
+
+    expect(find.byType(SkeletonCard), findsWidgets);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a failed load offers Reintentar and recovers', (tester) async {
+    final fakeService = _FakeChatService(fetchError: ApiException('boom'));
+    await tester.pumpWidget(buildApp(fakeService));
+    await tester.pumpAndSettle();
+    expect(find.byType(ErrorNotice), findsOneWidget);
+
+    fakeService
+      ..fetchError = null
+      ..conversations = [
+        ConversationSummary(
+          id: 'c1',
+          title: null,
+          createdAt: DateTime(2026, 9, 1, 10, 0),
+          updatedAt: DateTime(2026, 9, 2, 14, 32),
+        ),
+      ];
+    await tester.tap(find.text('Reintentar'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ErrorNotice), findsNothing);
+    expect(find.textContaining('2 sep'), findsOneWidget);
+  });
+
   testWidgets('shows an error message when fetching fails', (tester) async {
     final fakeService = _FakeChatService(fetchError: ApiException('boom'));
     await tester.pumpWidget(buildApp(fakeService));
@@ -109,7 +151,7 @@ void main() {
     await tester.pumpWidget(buildApp(fakeService));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.tap(find.byIcon(Symbols.delete_rounded));
     await tester.pumpAndSettle();
 
     expect(fakeService.deletedIds, ['c1']);
@@ -131,7 +173,7 @@ void main() {
     await tester.pumpWidget(buildApp(fakeService));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.tap(find.byIcon(Symbols.delete_rounded));
     await tester.pumpAndSettle();
 
     expect(find.text('No se pudo borrar.'), findsOneWidget);

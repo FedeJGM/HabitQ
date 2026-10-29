@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../app_routes.dart';
 import '../../features/activity/reminder_service.dart';
 import '../../features/auth/auth_service.dart';
+import '../theme/app_theme.dart';
+import 'decor/background_shapes.dart';
 import 'habitq_bottom_nav.dart';
 import 'habitq_header.dart';
 
@@ -39,7 +41,16 @@ class HabitQShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: HabitQHeader(onLogout: onLogout),
-      body: SafeArea(top: false, child: child),
+      body: DecoratedBox(
+        key: const ValueKey('app-background'),
+        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
+        child: Stack(
+          children: [
+            const Positioned.fill(child: BackgroundShapes()),
+            SafeArea(top: false, child: child),
+          ],
+        ),
+      ),
       bottomNavigationBar: HabitQBottomNav(
         current: currentTab,
         onSelected: (tab) {
