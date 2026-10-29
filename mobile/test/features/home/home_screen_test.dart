@@ -6,6 +6,7 @@ import 'package:mobile/features/auth/auth_service.dart';
 import 'package:mobile/features/auth/user.dart';
 import 'package:mobile/features/chat/chat_service.dart';
 import 'package:mobile/features/home/home_screen.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 class _FakeAuthService extends AuthService {
   _FakeAuthService({this.userToReturn, this.fetchError});
@@ -190,7 +191,7 @@ void main() {
     await tester.pumpWidget(buildApp(fakeService));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.logout));
+    await tester.tap(find.byIcon(Symbols.logout_rounded));
     await tester.pumpAndSettle();
 
     expect(fakeService.signOutCalled, isTrue);

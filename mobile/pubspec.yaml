@@ -19,6 +19,7 @@ dependencies:
   flutter_timezone: ^5.1.1
   fl_chart: 1.2.0
   flutter_markdown_plus: ^1.0.12
+  material_symbols_icons: ^4.2960.0
 
 dev_dependencies:
   flutter_test:

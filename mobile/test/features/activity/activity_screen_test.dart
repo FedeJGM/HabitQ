@@ -6,6 +6,7 @@ import 'package:mobile/features/activity/activity_screen.dart';
 import 'package:mobile/features/activity/reminder_service.dart';
 import 'package:mobile/features/activity/tasks_service.dart';
 import 'package:mobile/features/auth/auth_service.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'fake_notification_gateway.dart';
 
@@ -702,7 +703,7 @@ void main() {
       await pumpScreen(tester, service);
       gateway.cancelAllCalls = 0;
 
-      await tester.tap(find.byIcon(Icons.logout));
+      await tester.tap(find.byIcon(Symbols.logout_rounded));
       await tester.pumpAndSettle();
 
       expect(gateway.cancelAllCalls, 1);

@@ -86,6 +86,22 @@ void main() {
     expect(style!.fontSize, lessThanOrEqualTo(11));
   });
 
+  testWidgets('the icon of a newly selected tab pops in', (tester) async {
+    await tester.pumpWidget(buildNav(HabitQTab.home, (_) {}));
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(buildNav(HabitQTab.chat, (_) {}));
+    await tester.pump(const Duration(milliseconds: 40));
+
+    final scales = tester.widgetList<ScaleTransition>(
+      find.descendant(of: find.byType(NavigationBar), matching: find.byType(ScaleTransition)),
+    );
+    expect(scales.any((s) => s.scale.value < 1), isTrue);
+
+    await tester.pumpAndSettle();
+    expect(tester.hasRunningAnimations, isFalse);
+  });
+
   testWidgets('marks the current tab as selected', (tester) async {
     await tester.pumpWidget(buildNav(HabitQTab.chat, (_) {}));
 
