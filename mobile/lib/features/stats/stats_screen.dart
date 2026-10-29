@@ -1,16 +1,23 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/animated_count.dart';
+import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/error_notice.dart';
+import '../../core/widgets/fade_slide_in.dart';
 import '../../core/widgets/habitq_bottom_nav.dart';
 import '../../core/widgets/habitq_card.dart';
 import '../../core/widgets/habitq_shell.dart';
+import '../../core/widgets/skeleton.dart';
 import '../activity/reminder_service.dart';
 import '../auth/auth_service.dart';
 import '../habits/habit_questions.dart';
 import '../habits/habits_service.dart';
+import 'stats_insight.dart';
 import 'stats_service.dart';
 
 const _weekdayNames = [
@@ -76,6 +83,7 @@ class _StatsScreenState extends State<StatsScreen> {
   bool _isLoading = true;
   TaskStats? _taskStats;
   String? _statsError;
+  bool _statsErrorIsConnection = false;
   List<HabitRecord> _records = const [];
   String? _habitsError;
 
@@ -93,13 +101,27 @@ class _StatsScreenState extends State<StatsScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  void _retry() {
+    setState(() {
+      _isLoading = true;
+      _statsError = null;
+      _habitsError = null;
+    });
+    _load();
+  }
+
   // Each source fails on its own: a habits error must not hide the charts.
   Future<void> _loadStats(DateTime today) async {
     try {
       final stats = await _stats.fetchStats(today);
       if (mounted) setState(() => _taskStats = stats);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _statsError = e.message);
+      if (mounted) {
+        setState(() {
+          _statsError = e.message;
+          _statsErrorIsConnection = e is ApiConnectionException;
+        });
+      }
     }
   }
 
@@ -133,11 +155,15 @@ class _StatsScreenState extends State<StatsScreen> {
           const Text('Últimos 7 días', style: _mutedStyle),
           const SizedBox(height: 16),
           if (_isLoading)
-            const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))
+            const SkeletonList(count: 2)
           else ...[
             ..._tasksSection(),
             const SizedBox(height: 16),
-            _habitsSection(),
+            FadeSlideIn(
+              key: const ValueKey('stats-habits'),
+              delay: const Duration(milliseconds: 160),
+              child: _habitsSection(),
+            ),
           ],
         ],
       ),
@@ -146,34 +172,34 @@ class _StatsScreenState extends State<StatsScreen> {
 
   List<Widget> _tasksSection() {
     if (_statsError != null) {
-      return [Text(_statsError!, style: const TextStyle(color: AppColors.error, fontSize: 14))];
+      return [
+        ErrorNotice(message: _statsError!, isConnection: _statsErrorIsConnection, onRetry: _retry),
+      ];
     }
     final stats = _taskStats;
     if (stats == null) return const [];
-    if (!stats.hasData) return [_emptyCard()];
+    if (!stats.hasData) return [FadeSlideIn(key: const ValueKey('stats-empty'), child: _emptyCard())];
     return [
-      _completionCard(stats),
-      if (stats.counters.isNotEmpty) ...[const SizedBox(height: 16), _countersCard(stats)],
+      FadeSlideIn(key: const ValueKey('stats-completion'), child: _completionCard(stats)),
+      if (stats.counters.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        FadeSlideIn(
+          key: const ValueKey('stats-counters'),
+          delay: const Duration(milliseconds: 80),
+          child: _countersCard(stats),
+        ),
+      ],
     ];
   }
 
   Widget _emptyCard() {
     return HabitQCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Aún no hay datos para mostrar', style: _titleStyle),
-          const SizedBox(height: 8),
-          const Text(
-            'Elige tareas en Actividad y márcalas durante unos días para ver tu cumplimiento.',
-            style: _mutedStyle,
-          ),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pushReplacementNamed(AppRoutes.activity),
-            child: const Text('Ir a Actividad'),
-          ),
-        ],
+      child: EmptyState(
+        icon: Symbols.bar_chart_rounded,
+        title: 'Aún no hay datos para mostrar',
+        message: 'Elige tareas en Actividad y márcalas durante unos días para ver tu cumplimiento.',
+        actionLabel: 'Ir a Actividad',
+        onAction: () => Navigator.of(context).pushReplacementNamed(AppRoutes.activity),
       ),
     );
   }
@@ -187,17 +213,32 @@ class _StatsScreenState extends State<StatsScreen> {
         children: [
           const Text('Cumplimiento por día', style: _titleStyle),
           const SizedBox(height: 4),
-          Text('Hoy: ${today.completed} de ${today.active} tareas', style: _bodyStyle),
+          AnimatedCount(
+            value: today.completed,
+            builder: (context, count) => Text('Hoy: $count de ${today.active} tareas', style: _bodyStyle),
+          ),
           if (best != null)
             Text(
               'Mejor día: ${_weekdayNames[best.weekday - 1]} ${best.day}',
               style: _mutedStyle,
             ),
+          if (weeklyInsight(stats) case final insight?)
+            Padding(
+              key: const ValueKey('stats-insight'),
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(insight, style: _bodyStyle.copyWith(fontSize: 13)),
+            ),
           const SizedBox(height: 16),
-          SizedBox(
-            key: const ValueKey('stats-chart'),
-            height: 180,
-            child: BarChart(_chartData(stats)),
+          Semantics(
+            label: chartSummary(stats),
+            container: true,
+            child: ExcludeSemantics(
+              child: SizedBox(
+                key: const ValueKey('stats-chart'),
+                height: 180,
+                child: BarChart(_chartData(stats)),
+              ),
+            ),
           ),
         ],
       ),
@@ -212,7 +253,7 @@ class _StatsScreenState extends State<StatsScreen> {
       gridData: FlGridData(
         drawVerticalLine: false,
         horizontalInterval: 25,
-        getDrawingHorizontalLine: (_) => const FlLine(color: AppColors.surfaceMuted, strokeWidth: 1),
+        getDrawingHorizontalLine: (_) => FlLine(color: AppColors.sky.withValues(alpha: 0.5), strokeWidth: 1),
       ),
       borderData: FlBorderData(show: false),
       barTouchData: BarTouchData(
@@ -273,7 +314,7 @@ class _StatsScreenState extends State<StatsScreen> {
                 backDrawRodData: BackgroundBarChartRodData(
                   show: true,
                   toY: 100,
-                  color: AppColors.surfaceMuted.withValues(alpha: 0.5),
+                  color: AppColors.sky.withValues(alpha: 0.28),
                 ),
               ),
             ],

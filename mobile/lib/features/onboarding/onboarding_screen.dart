@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/step_progress.dart';
 import '../profile/profile_options.dart';
 import '../profile/profile_service.dart';
 
@@ -66,6 +67,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const StepProgress(current: 1, total: 2),
+              const SizedBox(height: 24),
               Text('¿Cuál es tu rango de edad?', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Wrap(

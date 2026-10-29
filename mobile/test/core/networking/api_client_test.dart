@@ -115,6 +115,35 @@ void main() {
       await expectLater(apiClient.get('/profile'), throwsA(isA<ApiException>()));
     });
 
+    test('a failed connection is reported as ApiConnectionException with the usual message', () async {
+      final mockClient = MockClient((request) async {
+        throw Exception('network down');
+      });
+
+      final apiClient = ApiClient(client: mockClient, tokenProvider: () async => null);
+
+      await expectLater(
+        apiClient.get('/profile'),
+        throwsA(
+          isA<ApiConnectionException>().having(
+            (e) => e.message,
+            'message',
+            'No se pudo conectar con el servidor. Verifica tu conexión.',
+          ),
+        ),
+      );
+    });
+
+    test('a backend error is not a connection error', () async {
+      final mockClient = MockClient((request) async => http.Response(jsonEncode({'detail': 'No'}), 500));
+      final apiClient = ApiClient(client: mockClient, tokenProvider: () async => null);
+
+      await expectLater(
+        apiClient.get('/profile'),
+        throwsA(isA<ApiException>().having((e) => e is ApiConnectionException, 'is connection', false)),
+      );
+    });
+
     test('getList attaches the Authorization header and returns a JSON array', () async {
       http.Request? capturedRequest;
       final mockClient = MockClient((request) async {

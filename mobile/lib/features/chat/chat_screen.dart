@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/error_notice.dart';
 import '../../core/widgets/habitq_bottom_nav.dart';
 import '../../core/widgets/habitq_shell.dart';
 import 'chat_service.dart';
@@ -53,6 +55,10 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isSending = false;
   bool _isLoadingHistory = false;
   String? _errorMessage;
+  bool _errorIsConnection = false;
+
+  /// What "Reintentar" does: the failed send or the failed history load.
+  VoidCallback? _retry;
   bool _initializedFromArguments = false;
 
   @override
@@ -78,7 +84,10 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _loadHistory(String conversationId) async {
-    setState(() => _isLoadingHistory = true);
+    setState(() {
+      _isLoadingHistory = true;
+      _errorMessage = null;
+    });
     try {
       final messages = await _chatService.fetchMessages(conversationId);
       if (!mounted) return;
@@ -95,6 +104,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() {
         _errorMessage = e.message;
+        _errorIsConnection = e is ApiConnectionException;
+        _retry = () => _loadHistory(conversationId);
         _isLoadingHistory = false;
       });
     }
@@ -132,12 +143,19 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty || _isSending) return;
 
+    setState(() => _messages.add(_DisplayMessage(role: 'user', content: text)));
+    _controller.clear();
+    await _send(text);
+  }
+
+  /// Sends [text] (its bubble is already on screen). Also used to retry a
+  /// failed question without showing it twice.
+  Future<void> _send(String text) async {
     setState(() {
-      _messages.add(_DisplayMessage(role: 'user', content: text));
       _isSending = true;
       _errorMessage = null;
+      _retry = null;
     });
-    _controller.clear();
     _scrollToBottom();
 
     var replied = false;
@@ -158,7 +176,11 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _errorMessage = e.message);
+      setState(() {
+        _errorMessage = e.message;
+        _errorIsConnection = e is ApiConnectionException;
+        _retry = () => _send(text);
+      });
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
@@ -291,7 +313,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pushNamed(AppRoutes.chatHistory),
-                  icon: const Icon(Icons.history),
+                  icon: const Icon(Symbols.history_rounded),
                   tooltip: 'Historial de conversaciones',
                 ),
               ],
@@ -349,7 +371,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   if (_errorMessage != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: Text(_errorMessage!, style: const TextStyle(color: AppColors.error)),
+                      child: ErrorNotice(
+                        message: _errorMessage!,
+                        isConnection: _errorIsConnection,
+                        onRetry: _retry,
+                      ),
                     ),
                   Padding(
                     padding: const EdgeInsets.all(8),
@@ -367,7 +393,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         const SizedBox(width: 8),
                         IconButton(
                           onPressed: _canSend ? _handleSend : null,
-                          icon: const Icon(Icons.send),
+                          icon: const Icon(Symbols.send_rounded),
                           color: AppColors.primary,
                         ),
                       ],

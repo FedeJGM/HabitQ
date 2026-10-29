@@ -1,26 +1,46 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../core/networking/api_client.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/celebration/celebration_overlay.dart';
+import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/error_notice.dart';
+import '../../core/widgets/fade_slide_in.dart';
 import '../../core/widgets/habitq_bottom_nav.dart';
 import '../../core/widgets/habitq_card.dart';
 import '../../core/widgets/habitq_shell.dart';
+import '../../core/widgets/skeleton.dart';
 import '../auth/auth_service.dart';
 import 'reminder_service.dart';
 import 'tasks_service.dart';
 
 const _months = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
 ];
 // Sunday-first, like the Figma week strip.
 const _weekdayLabels = ['DOM', 'L', 'M', 'X', 'J', 'V', 'S'];
 
 const _defaultReminder = TimeOfDay(hour: 8, minute: 0);
 
-DateTime _dateOnly(DateTime value) => DateTime(value.year, value.month, value.day);
+DateTime _dateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
 
 String _two(int value) => value.toString().padLeft(2, '0');
 
@@ -30,7 +50,9 @@ TimeOfDay? _parseReminder(String? time) {
   if (parts.length < 2) return null;
   final hour = int.tryParse(parts[0]);
   final minute = int.tryParse(parts[1]);
-  return hour == null || minute == null ? null : TimeOfDay(hour: hour, minute: minute);
+  return hour == null || minute == null
+      ? null
+      : TimeOfDay(hour: hour, minute: minute);
 }
 
 /// Actividad tab: the user's daily checklist. Shows the current week; today is
@@ -56,7 +78,8 @@ class ActivityScreen extends StatefulWidget {
   State<ActivityScreen> createState() => _ActivityScreenState();
 }
 
-class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObserver {
+class _ActivityScreenState extends State<ActivityScreen>
+    with WidgetsBindingObserver {
   late final TasksService _service;
   late final ReminderService _reminders;
   late DateTime _today;
@@ -64,8 +87,12 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
   List<DayTask> _tasks = [];
   bool _isLoading = true;
   String? _errorMessage;
+  bool _errorIsConnection = false;
   int _requestId = 0;
   final Set<String> _pending = {};
+  int _celebrationId = 0;
+  bool _celebrating = false;
+  bool _celebratingDay = false;
 
   bool get _isToday => _selected == _today;
 
@@ -92,7 +119,11 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     final today = _clockToday();
-    if (today == _today) return;
+    if (today == _today) {
+      // Back from the background after a failed load: try again by itself.
+      if (_errorMessage != null && !_isLoading) _load();
+      return;
+    }
     setState(() {
       _today = today;
       _selected = today;
@@ -111,7 +142,8 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       if (!mounted || requestId != _requestId) return;
       setState(() {
         // A removed task is only history: it shows on past days, never today.
-        _tasks = _isToday ? tasks.where((task) => !task.archived).toList() : tasks;
+        _tasks =
+            _isToday ? tasks.where((task) => !task.archived).toList() : tasks;
         _isLoading = false;
       });
       _syncReminders();
@@ -119,6 +151,7 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       if (!mounted || requestId != _requestId) return;
       setState(() {
         _errorMessage = e.message;
+        _errorIsConnection = e is ApiConnectionException;
         _isLoading = false;
       });
     }
@@ -137,12 +170,15 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
 
   void _replace(DayTask updated) {
     setState(() {
-      _tasks = [for (final task in _tasks) task.id == updated.id ? updated : task];
+      _tasks = [
+        for (final task in _tasks) task.id == updated.id ? updated : task
+      ];
     });
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _changeProgress(DayTask task, int next) async {
@@ -151,6 +187,10 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       final updated = await _service.setProgress(task.id, _selected, next);
       if (!mounted) return;
       _replace(updated);
+      // Only the move from pending to done celebrates: not loading, not unticking.
+      if (_isToday && !task.completed && updated.completed) {
+        _celebrate(dayComplete: _tasks.every((t) => t.completed));
+      }
       // Today's reminder depends on whether the task is done.
       if (updated.completed != task.completed) _syncReminders();
     } on ApiException catch (e) {
@@ -158,6 +198,23 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       _showError(e.message);
     } finally {
       _pending.remove(task.id);
+    }
+  }
+
+  void _celebrate({required bool dayComplete}) {
+    unawaited(_haptic());
+    setState(() {
+      _celebrationId++;
+      _celebrating = true;
+      _celebratingDay = dayComplete;
+    });
+  }
+
+  Future<void> _haptic() async {
+    try {
+      await HapticFeedback.mediumImpact();
+    } catch (_) {
+      // No vibration motor or no platform channel (tests): nothing to do.
     }
   }
 
@@ -212,7 +269,8 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
   Widget build(BuildContext context) {
     return HabitQShell(
       currentTab: HabitQTab.activity,
-      onLogout: () => signOutAndGoToLogin(context, widget.authService, _reminders),
+      onLogout: () =>
+          signOutAndGoToLogin(context, widget.authService, _reminders),
       child: Stack(
         children: [
           ListView(
@@ -242,7 +300,18 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
                 heroTag: null,
                 tooltip: 'Elegir tareas',
                 onPressed: _openPicker,
-                child: const Icon(Icons.edit),
+                child: const Icon(Symbols.edit_rounded),
+              ),
+            ),
+          if (_celebrating)
+            Positioned.fill(
+              child: CelebrationOverlay(
+                key: ValueKey('celebration-$_celebrationId'),
+                dayComplete: _celebratingDay,
+                seed: _celebrationId,
+                onFinished: () {
+                  if (mounted) setState(() => _celebrating = false);
+                },
               ),
             ),
         ],
@@ -263,35 +332,45 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       ];
 
   List<Widget> _content() {
-    if (_isLoading) {
-      return const [Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))];
-    }
+    if (_isLoading) return const [SkeletonList(count: 3)];
     if (_errorMessage != null) {
-      return [Text(_errorMessage!, style: const TextStyle(color: AppColors.error, fontSize: 14))];
+      return [
+        ErrorNotice(
+            message: _errorMessage!,
+            isConnection: _errorIsConnection,
+            onRetry: _load)
+      ];
     }
     if (_tasks.isEmpty) {
       return [
-        Text(
-          _isToday
-              ? 'Aún no tienes tareas. Toca el lápiz para elegir las de tu objetivo.'
-              : 'No hay tareas registradas este día.',
-          style: const TextStyle(
-            fontFamily: AppTheme.fontFamily,
-            fontSize: 14,
-            color: AppColors.textSecondary,
+        if (_isToday)
+          EmptyState(
+            icon: Symbols.checklist_rounded,
+            title: 'Aún no tienes tareas',
+            message: 'Toca el lápiz para elegir las de tu objetivo.',
+            actionLabel: 'Elegir tareas',
+            onAction: _openPicker,
+          )
+        else
+          const EmptyState(
+            icon: Symbols.event_busy_rounded,
+            title: 'No hay tareas registradas este día.',
           ),
-        ),
       ];
     }
     return [
-      for (final task in _tasks) ...[
-        _TaskCard(
-          key: ValueKey('task-${task.id}'),
-          task: task,
-          editable: _isToday,
-          onProgress: (next) => _changeProgress(task, next),
-          onPickReminder: () => _pickReminder(task),
-          onClearReminder: () => _clearReminder(task),
+      for (final (index, task) in _tasks.indexed) ...[
+        FadeSlideIn(
+          key: ValueKey('enter-${task.id}'),
+          delay: Duration(milliseconds: 50 * math.min(index, 6)),
+          child: _TaskCard(
+            key: ValueKey('task-${task.id}'),
+            task: task,
+            editable: _isToday,
+            onProgress: (next) => _changeProgress(task, next),
+            onPickReminder: () => _pickReminder(task),
+            onClearReminder: () => _clearReminder(task),
+          ),
         ),
         const SizedBox(height: 12),
       ],
@@ -304,7 +383,9 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
       children: [
         for (var i = 0; i < 7; i++) ...[
           if (i > 0) const SizedBox(width: 6),
-          Expanded(child: _dayChip(DateTime(start.year, start.month, start.day + i), i)),
+          Expanded(
+              child: _dayChip(
+                  DateTime(start.year, start.month, start.day + i), i)),
         ],
       ],
     );
@@ -316,40 +397,44 @@ class _ActivityScreenState extends State<ActivityScreen> with WidgetsBindingObse
     final textColor = selected
         ? Colors.white
         : (isFuture ? AppColors.textSecondary : AppColors.primary);
-    return Material(
-      color: selected ? AppColors.primary : Colors.white,
-      shape: RoundedRectangleBorder(
+    return AnimatedContainer(
+      duration: AppMotion.fast,
+      curve: AppMotion.standard,
+      decoration: BoxDecoration(
+        color: selected ? AppColors.primary : Colors.white,
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: isFuture ? AppColors.border : AppColors.primary, width: 1.5),
+        border: Border.all(
+            color: isFuture ? AppColors.border : AppColors.primary, width: 1.5),
       ),
-      child: InkWell(
-        key: ValueKey('day-${TasksService.dayKey(day)}'),
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        onTap: isFuture ? null : () => _selectDay(day),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            children: [
-              Text(
-                _weekdayLabels[index],
-                style: TextStyle(
-                  fontFamily: AppTheme.fontFamily,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11,
-                  color: textColor,
-                ),
+        child: InkWell(
+          key: ValueKey('day-${TasksService.dayKey(day)}'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: isFuture ? null : () => _selectDay(day),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: AnimatedDefaultTextStyle(
+              duration: AppMotion.fast,
+              style:
+                  TextStyle(fontFamily: AppTheme.fontFamily, color: textColor),
+              child: Column(
+                children: [
+                  Text(
+                    _weekdayLabels[index],
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 11),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${day.day}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w500, fontSize: 14),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                '${day.day}',
-                style: TextStyle(
-                  fontFamily: AppTheme.fontFamily,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
-                  color: textColor,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -387,7 +472,8 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final countText = '${task.progress}/${task.target}${task.unit.isEmpty ? '' : ' ${task.unit}'}';
+    final countText =
+        '${task.progress}/${task.target}${task.unit.isEmpty ? '' : ' ${task.unit}'}';
     final reminder = task.reminderTime;
     return HabitQCard(
       child: Column(
@@ -395,10 +481,20 @@ class _TaskCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
-                task.completed ? Icons.check_circle : Icons.task_alt_outlined,
-                color: AppColors.primary,
-                size: 28,
+              AnimatedSwitcher(
+                duration: AppMotion.medium,
+                switchInCurve: Curves.easeOutBack,
+                transitionBuilder: (child, animation) =>
+                    ScaleTransition(scale: animation, child: child),
+                child: Icon(
+                  task.completed
+                      ? Symbols.check_circle_rounded
+                      : Symbols.task_alt_rounded,
+                  key: ValueKey(task.completed),
+                  fill: task.completed ? 1 : 0,
+                  color: AppColors.primary,
+                  size: 28,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -414,21 +510,29 @@ class _TaskCard extends StatelessWidget {
                 Checkbox(
                   value: task.completed,
                   activeColor: AppColors.primary,
-                  onChanged: editable ? (value) => onProgress(value == true ? task.target : 0) : null,
+                  onChanged: editable
+                      ? (value) => onProgress(value == true ? task.target : 0)
+                      : null,
                 )
               else if (editable) ...[
                 IconButton(
                   tooltip: 'Restar',
-                  icon: const Icon(Icons.remove_circle_outline),
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  icon: const Icon(Symbols.remove_circle_rounded),
                   onPressed: task.progress > 0
-                      ? () => onProgress((task.progress - task.step).clamp(0, task.target))
+                      ? () => onProgress(
+                          (task.progress - task.step).clamp(0, task.target))
                       : null,
                 ),
                 IconButton(
                   tooltip: 'Sumar',
-                  icon: const Icon(Icons.add_circle_outline),
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  icon: const Icon(Symbols.add_circle_rounded),
                   onPressed: task.progress < task.target
-                      ? () => onProgress((task.progress + task.step).clamp(0, task.target))
+                      ? () => onProgress(
+                          (task.progress + task.step).clamp(0, task.target))
                       : null,
                 ),
               ],
@@ -436,12 +540,17 @@ class _TaskCard extends StatelessWidget {
           ),
           if (task.isCounter) ...[
             const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: task.progress / task.target,
-              minHeight: 6,
-              borderRadius: BorderRadius.circular(3),
-              color: AppColors.primary,
-              backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+            TweenAnimationBuilder<double>(
+              tween: Tween(end: task.progress / task.target),
+              duration: AppMotion.medium,
+              curve: AppMotion.enter,
+              builder: (context, value, _) => LinearProgressIndicator(
+                value: value,
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(3),
+                color: AppColors.primary,
+                backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+              ),
             ),
           ],
           if (editable || reminder != null)
@@ -449,19 +558,22 @@ class _TaskCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (reminder != null)
-                  Text(_parseReminder(reminder)?.format(context) ?? reminder, style: _subtitleStyle),
+                  Text(_parseReminder(reminder)?.format(context) ?? reminder,
+                      style: _subtitleStyle),
                 if (editable)
                   IconButton(
                     tooltip: 'Recordatorio',
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.access_time, size: 20),
+                    constraints:
+                        const BoxConstraints(minWidth: 48, minHeight: 48),
+                    icon: const Icon(Symbols.schedule_rounded, size: 20),
                     onPressed: onPickReminder,
                   ),
                 if (editable && reminder != null)
                   IconButton(
                     tooltip: 'Quitar recordatorio',
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.alarm_off, size: 20),
+                    constraints:
+                        const BoxConstraints(minWidth: 48, minHeight: 48),
+                    icon: const Icon(Symbols.alarm_off_rounded, size: 20),
                     onPressed: onClearReminder,
                   ),
               ],
@@ -539,7 +651,8 @@ class _TaskPickerSheetState extends State<_TaskPickerSheet> {
     final catalog = _catalog;
     return SafeArea(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+        constraints:
+            BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -559,14 +672,19 @@ class _TaskPickerSheetState extends State<_TaskPickerSheet> {
             if (_errorMessage != null)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(_errorMessage!, style: const TextStyle(color: AppColors.error, fontSize: 14)),
+                child: Text(_errorMessage!,
+                    style:
+                        const TextStyle(color: AppColors.error, fontSize: 14)),
               ),
             if (catalog == null && _errorMessage == null)
-              const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+              const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator()))
             else if (catalog != null && catalog.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('Completa tu perfil para ver las tareas de tu objetivo.'),
+                child: Text(
+                    'Completa tu perfil para ver las tareas de tu objetivo.'),
               )
             else if (catalog != null)
               Flexible(
@@ -577,11 +695,14 @@ class _TaskPickerSheetState extends State<_TaskPickerSheet> {
                       SwitchListTile(
                         title: Text(item.label),
                         subtitle: item.isCounter
-                            ? Text('Meta: ${item.target}${item.unit.isEmpty ? '' : ' ${item.unit}'}')
+                            ? Text(
+                                'Meta: ${item.target}${item.unit.isEmpty ? '' : ' ${item.unit}'}')
                             : null,
                         value: _activeIdByKey.containsKey(item.key),
                         activeThumbColor: AppColors.primary,
-                        onChanged: _busy.contains(item.key) ? null : (on) => _toggle(item, on),
+                        onChanged: _busy.contains(item.key)
+                            ? null
+                            : (on) => _toggle(item, on),
                       ),
                   ],
                 ),
