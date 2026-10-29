@@ -416,3 +416,44 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Alcance:** solo Android. No se tocaron los recursos de iOS ni los de web/escritorio, porque el proyecto se desarrolla y prueba en Android (D-27).
 
 **Pendiente:** los PNG de ícono se generaron a partir del logo HQ; el archivo fuente del logo no está en el repositorio (`Diseño/` solo contiene los bocetos de pantallas). Si hay que regenerarlos, hace falta el original.
+
+---
+
+## D-30 — Pulido visual y de movimiento de la app móvil (sin cambiar paleta ni estructura)
+
+**Contexto:** la retroalimentación del profesor señaló que la app se veía simple y sin «vida». La app no tenía animaciones propias, usaba los íconos básicos de Material, fondos blancos planos y la transición de página por defecto.
+
+**Decisión (2026-10-28):** se modernizó la capa visual **sin tocar la paleta (`AppColors`), la tipografía Lexend ni la estructura de pantallas de los mockups de Figma**. El único color nuevo es `AppColors.sun` (`0xFFF2C94C`, el amarillo de las ilustraciones de Figma), solo para acentos de celebración.
+- **Íconos:** `Icons.*` pasa a Material Symbols Rounded (`material_symbols_icons`); la pestaña activa usa el ícono relleno.
+- **Formas de fondo:** `BackgroundShapes` (manchas orgánicas y puntos, estáticas) detrás de todas las pestañas y del login.
+- **Celebración:** al pasar una tarea de pendiente a completada **hoy** se dibujan fuegos artificiales (`CelebrationOverlay`, `CustomPainter` propio, sin paquete) con vibración suave; si queda completo todo el día, un banner «¡Día completo!». No se dispara al cargar la pantalla, al desmarcar, con errores de guardado ni en días pasados.
+- **Movimiento:** `AppMotion` centraliza duraciones y curvas; entradas escalonadas (`FadeSlideIn`), tarjetas que se encogen al presionarlas, chips de día y barras de progreso animados, y transición de página de fundido con ligero ascenso en Android.
+- **Fluidez:** `AppScrollBehavior` (rebote en todas las plataformas), `RepaintBoundary` en tarjetas y fondo, logo decodificado a su tamaño real y petición explícita de la mayor tasa de refresco de la pantalla desde `MainActivity.kt`.
+- **Accesibilidad:** con «Quitar animaciones» del sistema se omiten las partículas y las transiciones; el banner, que informa, se mantiene.
+
+**Reglas que se mantienen:** todas las animaciones son **finitas** (nada con `repeat()`), porque las pruebas usan `pumpAndSettle` y un bucle infinito las colgaría; la pantalla de consentimiento conserva su tema heredado.
+
+**Alternativas descartadas:** (a) paquete `confetti` o Lottie: una dependencia más para un efecto de ~1,6 s que se dibuja con un `CustomPainter` en la paleta propia; (b) `flutter_displaymode`: paquete sin mantenimiento reciente para lo que resuelven ~15 líneas nativas; (c) `IndexedStack` para las pestañas: cambia la arquitectura de navegación y obligaría a reescribir las pruebas del shell; (d) animar las burbujas del chat: choca con el cálculo de desplazamiento hacia el inicio de la respuesta, así que quedó fuera.
+
+**Pendiente:** confirmar en un teléfono de 120 Hz que el selector de modo de pantalla respeta la petición (algunos fabricantes la ignoran con el ahorro de batería activo).
+
+---
+
+## D-31 — Paleta con celeste, hábitos por pasos y estados de la interfaz
+
+**Contexto:** tras D-30 la responsable del proyecto pidió que la app destaque en frontend y en experiencia de usuario, con la skill UI UX Pro Max como consulta (instalada solo en local, fuera de git), y fijó tres cambios: que la app se componga sobre todo de **celeste, blanco y verde**; que **Inicio muestre las tareas de Actividad**; y que las preguntas de hábitos se hagan **una por una**, con una animación según la categoría de la respuesta.
+
+**Decisión (2026-10-28):**
+- **Paleta:** se amplía, no se reemplaza. Tokens nuevos `sky` (`8FD3F4`), `skyLight` (`E6F6FD`) y `skyDeep` (`2E9BD6`, solo íconos y detalles). Fondo con degradado blanco→`skyLight` en todas las pestañas y el login, cabecera y barra de navegación en celeste, saludo de Inicio en celeste. El verde sigue siendo el de las acciones y el texto sigue en azul marino, porque el verde sobre celeste no alcanza un contraste legible (los pares nuevos tienen prueba de contraste WCAG).
+- **Inicio:** tarjeta «Tus tareas de hoy» con anillo de progreso y hasta tres tareas pendientes; es de solo lectura y al tocarla abre la pestaña Actividad, donde se completan.
+- **Hábitos por pasos** (`HabitWizard`, compartido por el onboarding y Mis hábitos): una pregunta por pantalla con barra de progreso «Pregunta X de 9», respuestas como tarjetas de 56 dp, avance automático tras elegir, Atrás/Siguiente y un resumen final. Al elegir se lanza una animación de la **categoría** (Sueño: «z/Z»; Alimentación: manzana y hoja; Actividad física: rayo y corredor; Hidratación: gotas; Pantallas: móvil y ojo; Estrés: spa y hoja), nunca de la respuesta, para no emitir juicios. En Mis hábitos cada cambio se guarda al elegir y solo se anima y avanza si el guardado fue aceptado; una pregunta sin registro muestra «Sin responder» y se puede saltar (no se crean registros ahí, regla vigente). El onboarding sigue guardando todo al final.
+- **Errores y estados:** `ApiConnectionException` (subtipo de `ApiException`, mismo mensaje) distingue «no hay conexión» de los errores del servidor. `ErrorNotice` (con «Reintentar» y anunciado a lectores de pantalla) reemplaza el texto rojo suelto en Inicio, Actividad, Estadísticas, historial, Mis hábitos y chat (reintenta la misma pregunta sin duplicarla); Actividad reintenta sola al volver a la app tras un fallo. Esqueletos estáticos (sin brillo en bucle) reemplazan las ruedas de carga y `EmptyState` dibuja los estados vacíos con la paleta.
+- **Estadísticas:** conteo animado de «Hoy X de Y», una frase semanal neutra («Completaste el 43 % de las tareas que elegiste…», sin juicio de salud, D-28) y un resumen hablado del gráfico para lectores de pantalla.
+- **Navegación y primera impresión:** el ícono de la pestaña recién elegida rebota; indicador «Paso 1 de 2» en el perfil del onboarding; splash nativo con el logo (`splash_logo.png`, Android 12+ con `values-v31`). El logo original trae un tablero de ajedrez «transparente» incrustado, así que se generó `logo_hq_clean.png` con fondo realmente transparente (el original no se tocó).
+- **Accesibilidad:** botones de icono de 48 dp, opciones con estado «seleccionado» y movimiento reducido respetado en todo.
+
+**Consultado en la skill y aplicado:** progreso visible en flujos de varios pasos; errores anunciados; vibración solo en confirmaciones (por eso la barra de navegación **no** vibra); estados vacíos con una acción.
+
+**Alternativas descartadas:** (a) `Hero` entre la tarjeta de Inicio y su pantalla: choca con la transición de página y aporta poco; (b) brillo de carga en bucle: un `repeat()` impide que las pruebas con `pumpAndSettle` terminen; (c) oscurecer el verde para el texto pequeño: toca la paleta de Figma y la responsable no lo pidió (el verde `0CBC8B` sobre blanco da ~2,5:1; queda como mejora pendiente); (d) animar según la respuesta (p. ej. «mal sueño»): sería un juicio de salud.
+
+**Pendiente:** ver en el teléfono el splash y el nuevo logo en la cabecera; las respuestas de un cuestionario ya guardado no cambian.
