@@ -13,7 +13,7 @@ from app.models.profile import Profile
 from app.models.scientific_document import ScientificDocument
 from app.services.llm_service import generate_answer
 from app.services.retrieval_service import retrieve_top_chunks
-from app.services.user_context_labels import HABIT_LABELS, MAIN_GOAL_LABELS
+from app.services.user_context_labels import GENDER_LABELS, HABIT_LABELS, MAIN_GOAL_LABELS
 
 
 @dataclass(frozen=True)
@@ -71,16 +71,30 @@ def _describe_habit(habit: HabitRecord) -> str:
     return f"{question}: {options.get(habit.value, habit.value)}"
 
 
+def _describe_profile(profile: Profile) -> str:
+    parts = [f"rango de edad {profile.age_range}"]
+    if profile.gender is not None:
+        parts.append(f"género {GENDER_LABELS.get(profile.gender, profile.gender)}")
+    if profile.height_cm is not None:
+        parts.append(f"altura {profile.height_cm:g} cm")
+    if profile.weight_kg is not None:
+        weight = f"peso {profile.weight_kg:g} kg"
+        if profile.height_cm:
+            bmi = profile.weight_kg / (profile.height_cm / 100) ** 2
+            weight += f" (IMC {bmi:.1f})"
+        parts.append(weight)
+    goal = MAIN_GOAL_LABELS.get(profile.main_goal, profile.main_goal)
+    parts.append(f"objetivo principal {goal}")
+    return f"Perfil: {', '.join(parts)}."
+
+
 def build_user_context(profile: Profile | None, habits: list[HabitRecord]) -> str | None:
     if profile is None and not habits:
         return None
 
     lines: list[str] = []
     if profile is not None:
-        goal = MAIN_GOAL_LABELS.get(profile.main_goal, profile.main_goal)
-        lines.append(
-            f"Perfil: rango de edad {profile.age_range}, objetivo principal {goal}."
-        )
+        lines.append(_describe_profile(profile))
     if habits:
         lines.append("Hábitos registrados:")
         for habit in habits:

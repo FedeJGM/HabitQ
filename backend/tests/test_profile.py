@@ -149,3 +149,139 @@ def test_put_profile_updates_existing() -> None:
     assert body["id"] == str(original_id)
     assert body["age_range"] == "25-34"
     assert body["main_goal"] == "sleep_better"
+
+
+# --- physical data: gender, height and weight ---
+
+
+def _full_payload(**overrides) -> dict:
+    payload = {
+        "age_range": "25-34",
+        "main_goal": "sleep_better",
+        "gender": "female",
+        "height_cm": 165,
+        "weight_kg": 60.5,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _put(payload: dict, profile: Profile | None = None):
+    fake_db = _override_auth(profile=profile)
+    try:
+        response = client.put("/profile", json=payload)
+    finally:
+        _clear_overrides()
+    return response, fake_db
+
+
+def test_put_profile_stores_and_returns_physical_data() -> None:
+    response, fake_db = _put(_full_payload())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gender"] == "female"
+    assert body["height_cm"] == 165
+    assert body["weight_kg"] == 60.5
+    assert fake_db.profile.gender == "female"
+    assert fake_db.profile.height_cm == 165
+    assert fake_db.profile.weight_kg == 60.5
+
+
+def test_put_profile_updates_physical_data_of_existing_profile() -> None:
+    existing = Profile(
+        id=uuid.uuid4(),
+        user_id=_CURRENT_USER.id,
+        age_range="18-24",
+        main_goal="sleep_better",
+        gender="male",
+        height_cm=170,
+        weight_kg=70,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    response, _ = _put(_full_payload(gender="other", height_cm=180, weight_kg=82), existing)
+    assert response.status_code == 200
+    assert existing.gender == "other"
+    assert existing.height_cm == 180
+    assert existing.weight_kg == 82
+
+
+def test_put_profile_physical_data_is_optional() -> None:
+    response, _ = _put({"age_range": "25-34", "main_goal": "sleep_better"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gender"] is None
+    assert body["height_cm"] is None
+    assert body["weight_kg"] is None
+
+
+def test_put_profile_accepts_every_gender_option() -> None:
+    for gender in ("female", "male", "other", "prefer_not_to_say"):
+        response, _ = _put(_full_payload(gender=gender))
+        assert response.status_code == 200, gender
+
+
+def test_put_profile_rejects_unknown_gender() -> None:
+    response, _ = _put(_full_payload(gender="robot"))
+    assert response.status_code == 422
+
+
+def test_put_profile_rejects_height_out_of_range() -> None:
+    for height in (99, 251, 0, -5):
+        response, _ = _put(_full_payload(height_cm=height))
+        assert response.status_code == 422, height
+
+
+def test_put_profile_accepts_height_range_limits() -> None:
+    for height in (100, 250):
+        response, _ = _put(_full_payload(height_cm=height))
+        assert response.status_code == 200, height
+
+
+def test_put_profile_rejects_weight_out_of_range() -> None:
+    for weight in (19.9, 300.1, 0, -1):
+        response, _ = _put(_full_payload(weight_kg=weight))
+        assert response.status_code == 422, weight
+
+
+def test_get_profile_returns_physical_data() -> None:
+    existing = Profile(
+        id=uuid.uuid4(),
+        user_id=_CURRENT_USER.id,
+        age_range="25-34",
+        main_goal="sleep_better",
+        gender="prefer_not_to_say",
+        height_cm=172,
+        weight_kg=68.4,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    _override_auth(profile=existing)
+    try:
+        response = client.get("/profile")
+    finally:
+        _clear_overrides()
+    body = response.json()
+    assert body["gender"] == "prefer_not_to_say"
+    assert body["height_cm"] == 172
+    assert body["weight_kg"] == 68.4
+
+
+def test_get_profile_of_legacy_profile_has_null_physical_data() -> None:
+    existing = Profile(
+        id=uuid.uuid4(),
+        user_id=_CURRENT_USER.id,
+        age_range="25-34",
+        main_goal="sleep_better",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    _override_auth(profile=existing)
+    try:
+        response = client.get("/profile")
+    finally:
+        _clear_overrides()
+    body = response.json()
+    assert body["gender"] is None
+    assert body["height_cm"] is None
+    assert body["weight_kg"] is None

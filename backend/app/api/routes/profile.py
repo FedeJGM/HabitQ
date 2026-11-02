@@ -27,6 +27,12 @@ def update_profile(
     db: Session = Depends(get_db),
 ) -> ProfileOut:
     profile = upsert_profile(
-        db, current_user.id, age_range=payload.age_range, main_goal=payload.main_goal
+        db,
+        current_user.id,
+        age_range=payload.age_range,
+        main_goal=payload.main_goal,
+        gender=payload.gender,
+        height_cm=payload.height_cm,
+        weight_kg=payload.weight_kg,
     )
     return ProfileOut.model_validate(profile)

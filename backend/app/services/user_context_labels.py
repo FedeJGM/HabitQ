@@ -15,6 +15,13 @@ MAIN_GOAL_LABELS: dict[str, str] = {
     "manage_stress": "Manejar mejor el estrés",
 }
 
+GENDER_LABELS: dict[str, str] = {
+    "female": "Femenino",
+    "male": "Masculino",
+    "other": "Otro",
+    "prefer_not_to_say": "Prefiere no decir",
+}
+
 # (domain, key) -> (what the question measures, {stored value: option label})
 HABIT_LABELS: dict[tuple[str, str], tuple[str, dict[str, str]]] = {
     ("sleep", "hours"): (
@@ -26,35 +33,36 @@ HABIT_LABELS: dict[tuple[str, str], tuple[str, dict[str, str]]] = {
         {"never": "Nunca", "sometimes": "A veces", "often": "Frecuentemente"},
     ),
     ("nutrition", "fruits_vegetables"): (
-        "Frecuencia de consumo de frutas o verduras",
-        {"rarely": "Rara vez", "some_days": "Algunos días", "almost_daily": "Casi todos los días"},
+        "Veces al día que incluye frutas o verduras",
+        {"none": "Ninguna", "1": "1 vez", "2": "2 veces", "3_plus": "3 o más veces"},
     ),
     ("nutrition", "fast_food"): (
-        "Frecuencia de consumo de comida rápida o ultraprocesados",
+        "Comida rápida o ultraprocesados a la semana",
         {
-            "rarely": "Rara vez",
-            "weekly_1_2": "1–2 veces por semana",
-            "weekly_3_plus": "3 o más veces por semana",
+            "never": "Nunca",
+            "weekly_1_3": "1–3 veces",
+            "weekly_4_6": "4–6 veces",
+            "daily": "Todos los días",
         },
     ),
     ("physical_activity", "days_per_week"): (
-        "Días por semana con actividad física",
-        {"0": "0", "1_2": "1–2", "3_4": "3–4", "5_plus": "5 o más"},
+        "Días a la semana que hace ejercicio",
+        {"0": "Ninguno", "1_2": "1–2", "3_4": "3–4", "5_plus": "5 o más"},
     ),
     ("physical_activity", "sedentary_hours"): (
-        "Pasa varias horas seguidas sentado",
-        {"yes": "Sí", "no": "No"},
+        "Horas al día sentado",
+        {"less_4h": "Menos de 4 h", "4_6h": "4–6 h", "7_9h": "7–9 h", "more_9h": "Más de 9 h"},
     ),
     ("hydration", "daily_intake"): (
-        "Consumo diario de agua",
-        {"low": "Bajo", "moderate": "Moderado", "adequate": "Adecuado"},
+        "Litros de agua al día",
+        {"less_1l": "Menos de 1 L", "1_2l": "1–2 L", "2_3l": "2–3 L", "more_3l": "Más de 3 L"},
     ),
     ("screen_time", "recreational_hours"): (
-        "Tiempo recreativo frente a pantallas",
-        {"less_2h": "Menos de 2 horas", "2_4h": "2–4 horas", "more_4h": "Más de 4 horas"},
+        "Tiempo diario frente a dispositivos electrónicos",
+        {"less_2h": "Menos de 2 h", "2_4h": "2–4 h", "4_6h": "4–6 h", "more_6h": "Más de 6 h"},
     ),
     ("stress", "frequency"): (
-        "Frecuencia de estrés durante la rutina",
-        {"rarely": "Rara vez", "sometimes": "A veces", "often": "Frecuentemente"},
+        "Días a la semana con estrés que afecta la rutina (último mes)",
+        {"none": "Ninguno", "1_2": "1–2 días", "3_4": "3–4 días", "5_plus": "5 o más días"},
     ),
 }
