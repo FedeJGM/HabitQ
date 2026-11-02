@@ -319,21 +319,21 @@ void main() {
       final habits = _FakeHabitsService(records: [
         _record('1', 'sleep', 'hours', '7_8'),
         _record('2', 'sleep', 'screen_before_bed', 'sometimes'),
-        _record('3', 'hydration', 'daily_intake', 'adequate'),
+        _record('3', 'hydration', 'daily_intake', '2_3l'),
       ]);
       await pumpScreen(tester, stats: _FakeStatsService(), habits: habits);
 
       expect(find.text('Resumen de tus hábitos'), findsOneWidget);
       expect(find.text('Sueño'), findsOneWidget);
       expect(find.text('Hidratación'), findsOneWidget);
-      expect(find.text('¿Cuántas horas duermes normalmente?'), findsOneWidget);
+      expect(find.text('¿Cuántas horas de sueño tienes en promedio diariamente?'), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('habit-sleep-hours')), matching: find.text('7–8')), findsOneWidget);
       expect(
         find.descendant(of: find.byKey(const ValueKey('habit-sleep-screen_before_bed')), matching: find.text('A veces')),
         findsOneWidget,
       );
       expect(
-        find.descendant(of: find.byKey(const ValueKey('habit-hydration-daily_intake')), matching: find.text('Adecuado')),
+        find.descendant(of: find.byKey(const ValueKey('habit-hydration-daily_intake')), matching: find.text('2–3 L')),
         findsOneWidget,
       );
     });
@@ -349,12 +349,12 @@ void main() {
     });
 
     testWidgets('matches by domain and key, not by key alone', (tester) async {
-      // "rarely" is an option of several questions: only the recorded one is answered.
-      final habits = _FakeHabitsService(records: [_record('1', 'stress', 'frequency', 'rarely')]);
+      // "none" is an option of several questions: only the recorded one is answered.
+      final habits = _FakeHabitsService(records: [_record('1', 'stress', 'frequency', 'none')]);
       await pumpScreen(tester, stats: _FakeStatsService(), habits: habits);
 
       expect(
-        find.descendant(of: find.byKey(const ValueKey('habit-stress-frequency')), matching: find.text('Rara vez')),
+        find.descendant(of: find.byKey(const ValueKey('habit-stress-frequency')), matching: find.text('Ninguno')),
         findsOneWidget,
       );
       expect(

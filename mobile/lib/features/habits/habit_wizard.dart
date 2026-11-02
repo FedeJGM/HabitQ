@@ -8,6 +8,7 @@ import '../../core/theme/app_motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/celebration/celebration_overlay.dart';
 import '../../core/widgets/decor/background_shapes.dart';
+import '../../core/widgets/step_flow.dart';
 import 'domain_burst.dart';
 import 'habit_domain_visuals.dart';
 import 'habit_questions.dart';
@@ -169,26 +170,10 @@ class _HabitWizardState extends State<HabitWizard> with SingleTickerProviderStat
                   _header(),
                   const SizedBox(height: 20),
                   Expanded(
-                    child: AnimatedSwitcher(
-                      duration: AppMotion.medium,
-                      switchInCurve: AppMotion.enter,
-                      transitionBuilder: (child, animation) {
-                        final entering = child.key == ValueKey(_step);
-                        final offset = Tween<Offset>(
-                          begin: Offset(entering ? 0.12 * _direction : -0.12 * _direction, 0),
-                          end: Offset.zero,
-                        ).animate(animation);
-                        return FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(position: offset, child: child),
-                        );
-                      },
-                      child: KeyedSubtree(
-                        key: ValueKey(_step),
-                        child: SingleChildScrollView(
-                          child: _onSummary ? _summary() : _question(_steps[_step].question),
-                        ),
-                      ),
+                    child: StepSwitcher(
+                      step: _step,
+                      direction: _direction,
+                      child: _onSummary ? _summary() : _question(_steps[_step].question),
                     ),
                   ),
                   if (widget.errorMessage != null)
@@ -273,19 +258,7 @@ class _HabitWizardState extends State<HabitWizard> with SingleTickerProviderStat
           ],
         ),
         const SizedBox(height: 12),
-        TweenAnimationBuilder<double>(
-          tween: Tween(end: progress),
-          duration: AppMotion.reduce(context) ? Duration.zero : AppMotion.medium,
-          curve: AppMotion.enter,
-          builder: (context, value, _) => LinearProgressIndicator(
-            key: const ValueKey('wizard-progress'),
-            value: value,
-            minHeight: 8,
-            borderRadius: BorderRadius.circular(4),
-            color: AppColors.primary,
-            backgroundColor: AppColors.sky.withValues(alpha: 0.4),
-          ),
-        ),
+        StepProgressBar(barKey: const ValueKey('wizard-progress'), value: progress),
       ],
     );
   }
@@ -306,6 +279,17 @@ class _HabitWizardState extends State<HabitWizard> with SingleTickerProviderStat
             color: AppColors.textPrimary,
           ),
         ),
+        if (question.hint != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            question.hint!,
+            style: const TextStyle(
+              fontFamily: AppTheme.fontFamily,
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         if (locked) ...[
           const Text(
@@ -324,7 +308,7 @@ class _HabitWizardState extends State<HabitWizard> with SingleTickerProviderStat
           ),
         ] else
           for (final option in question.options) ...[
-            HabitOptionTile(
+            OptionTile(
               key: ValueKey('${question.key}:${option.value}'),
               label: option.label,
               selected: current == option.value,
@@ -376,114 +360,13 @@ class _HabitWizardState extends State<HabitWizard> with SingleTickerProviderStat
   }
 
   Widget _navigation() {
-    final back = TextButton(
-      onPressed: _step > 0 && !_busy && !widget.isFinishing ? () => _goTo(_step - 1) : null,
-      style: TextButton.styleFrom(minimumSize: const Size(96, 48), foregroundColor: AppColors.textPrimary),
-      child: const Text('Atrás'),
+    return StepNavigation(
+      onBack: _step > 0 && !_busy && !widget.isFinishing ? () => _goTo(_step - 1) : null,
+      onForward: _onSummary
+          ? (widget.isFinishing ? null : widget.onFinish)
+          : (_canGoNext ? () => _goTo(_step + 1) : null),
+      forwardLabel: _onSummary ? widget.finishLabel : 'Siguiente',
+      isLoading: _onSummary && widget.isFinishing,
     );
-    final forward = _onSummary
-        ? FilledButton(
-            onPressed: widget.isFinishing ? null : widget.onFinish,
-            style: FilledButton.styleFrom(minimumSize: const Size(140, 48), shape: const StadiumBorder()),
-            child: widget.isFinishing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : Text(widget.finishLabel),
-          )
-        : FilledButton(
-            onPressed: _canGoNext ? () => _goTo(_step + 1) : null,
-            style: FilledButton.styleFrom(minimumSize: const Size(140, 48), shape: const StadiumBorder()),
-            child: const Text('Siguiente'),
-          );
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [back, forward],
-    );
-  }
-}
-
-/// A large tappable answer. Reports the center of the tile (in global
-/// coordinates) so the category animation can start from it.
-class HabitOptionTile extends StatelessWidget {
-  const HabitOptionTile({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.enabled = true,
-  });
-
-  final String label;
-  final bool selected;
-  final bool enabled;
-  final ValueChanged<Offset> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(14);
-    return Semantics(
-      container: true,
-      button: true,
-      selected: selected,
-      enabled: enabled,
-      label: label,
-      onTap: enabled ? () => onTap(_center(context)) : null,
-      child: ExcludeSemantics(
-        child: AnimatedContainer(
-          duration: AppMotion.fast,
-          curve: AppMotion.standard,
-          constraints: const BoxConstraints(minHeight: 56),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.primary.withValues(alpha: 0.14) : Colors.white,
-            borderRadius: radius,
-            border: Border.all(
-              color: selected ? AppColors.primary : AppColors.sky,
-              width: selected ? 2 : 1.2,
-            ),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: radius,
-            child: InkWell(
-              borderRadius: radius,
-              onTap: enabled ? () => onTap(_center(context)) : null,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontFamily: AppTheme.fontFamily,
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                          fontSize: 16,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    AnimatedScale(
-                      scale: selected ? 1 : 0,
-                      duration: AppMotion.fast,
-                      curve: Curves.easeOutBack,
-                      child: const Icon(Symbols.check_circle_rounded, fill: 1, color: AppColors.primary),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Offset _center(BuildContext context) {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return Offset.zero;
-    return box.localToGlobal(box.size.center(Offset.zero));
   }
 }

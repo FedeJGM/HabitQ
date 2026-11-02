@@ -63,13 +63,13 @@ void main() {
   const answersByQuestion = {
     'hours': 'less_5',
     'screen_before_bed': 'never',
-    'fruits_vegetables': 'rarely',
-    'fast_food': 'rarely',
+    'fruits_vegetables': 'none',
+    'fast_food': 'never',
     'days_per_week': '0',
-    'sedentary_hours': 'yes',
-    'daily_intake': 'low',
+    'sedentary_hours': 'less_4h',
+    'daily_intake': 'less_1l',
     'recreational_hours': 'less_2h',
-    'frequency': 'rarely',
+    'frequency': 'none',
   };
 
   /// Answers every question, one step at a time (each pick advances by itself).
@@ -86,8 +86,8 @@ void main() {
 
     expect(find.text('Tus hábitos'), findsOneWidget);
     expect(find.text('Pregunta 1 de 9'), findsOneWidget);
-    expect(find.text('¿Cuántas horas duermes normalmente?'), findsOneWidget);
-    expect(find.text('¿Con qué frecuencia consumes frutas o verduras?'), findsNothing);
+    expect(find.text('¿Cuántas horas de sueño tienes en promedio diariamente?'), findsOneWidget);
+    expect(find.text('¿Cuántas veces al día incluyes frutas o verduras en tus comidas?'), findsNothing);
   });
 
   testWidgets('cannot move forward without answering the question', (tester) async {

@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/networking/api_client.dart';
 import 'package:mobile/core/widgets/error_notice.dart';
 import 'package:mobile/core/widgets/skeleton.dart';
-import 'package:mobile/features/habits/habit_wizard.dart';
+import 'package:mobile/core/widgets/step_flow.dart';
 import 'package:mobile/features/habits/habits_screen.dart';
 import 'package:mobile/features/habits/habits_service.dart';
 
@@ -79,8 +79,8 @@ void main() {
   const sleepScreenRecord =
       HabitRecord(id: 'h2', domain: 'sleep', key: 'screen_before_bed', value: 'never');
 
-  HabitOptionTile tile(WidgetTester tester, String key, String value) =>
-      tester.widget<HabitOptionTile>(find.byKey(ValueKey('$key:$value')));
+  OptionTile tile(WidgetTester tester, String key, String value) =>
+      tester.widget<OptionTile>(find.byKey(ValueKey('$key:$value')));
 
   testWidgets('shows the saved answer of the first question already marked', (tester) async {
     await open(tester, _FakeHabitsService(records: const [sleepHoursRecord]));

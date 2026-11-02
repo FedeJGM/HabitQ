@@ -59,10 +59,67 @@ void main() {
       final profile = await service.saveProfile(ageRange: '25-34', mainGoal: 'sleep_better');
 
       expect(fakeClient.lastPath, '/profile');
-      expect(fakeClient.lastBody, {'age_range': '25-34', 'main_goal': 'sleep_better'});
+      expect(fakeClient.lastBody, {
+        'age_range': '25-34',
+        'main_goal': 'sleep_better',
+        'gender': null,
+        'height_cm': null,
+        'weight_kg': null,
+      });
       expect(profile.ageRange, '25-34');
       expect(profile.mainGoal, 'sleep_better');
       expect(profile.userId, 'u1');
+    });
+
+    test('saveProfile sends gender, height and weight and parses them back', () async {
+      final fakeClient = _FakeApiClient(response: {
+        'id': 'p1',
+        'user_id': 'u1',
+        'age_range': '25-34',
+        'main_goal': 'sleep_better',
+        'gender': 'female',
+        'height_cm': 165,
+        'weight_kg': 60,
+      });
+      final service = ProfileService(apiClient: fakeClient);
+
+      final profile = await service.saveProfile(
+        ageRange: '25-34',
+        mainGoal: 'sleep_better',
+        gender: 'female',
+        heightCm: 165,
+        weightKg: 60.0,
+      );
+
+      expect(fakeClient.lastBody, {
+        'age_range': '25-34',
+        'main_goal': 'sleep_better',
+        'gender': 'female',
+        'height_cm': 165,
+        'weight_kg': 60.0,
+      });
+      expect(profile.gender, 'female');
+      expect(profile.heightCm, 165);
+      expect(profile.weightKg, 60.0);
+    });
+
+    test('getProfile leaves physical data null for profiles created before it existed', () async {
+      final fakeClient = _FakeApiClient(response: {
+        'id': 'p1',
+        'user_id': 'u1',
+        'age_range': '25-34',
+        'main_goal': 'sleep_better',
+        'gender': null,
+        'height_cm': null,
+        'weight_kg': null,
+      });
+      final service = ProfileService(apiClient: fakeClient);
+
+      final profile = await service.getProfile();
+
+      expect(profile.gender, isNull);
+      expect(profile.heightCm, isNull);
+      expect(profile.weightKg, isNull);
     });
 
     test('saveProfile propagates ApiException from the backend', () async {

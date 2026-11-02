@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/features/habits/domain_burst.dart';
 import 'package:mobile/features/habits/habit_questions.dart';
+import 'package:mobile/core/widgets/step_flow.dart';
 import 'package:mobile/features/habits/habit_wizard.dart';
 
 void main() {
@@ -57,8 +58,8 @@ void main() {
   Finder option(String key, String value) => find.byKey(ValueKey('$key:$value'));
   final burst = find.byKey(const ValueKey('domain-burst-paint'));
 
-  HabitOptionTile tile(WidgetTester tester, String key, String value) =>
-      tester.widget<HabitOptionTile>(option(key, value));
+  OptionTile tile(WidgetTester tester, String key, String value) =>
+      tester.widget<OptionTile>(option(key, value));
 
   testWidgets('shows one question at a time with its progress', (tester) async {
     await tester.pumpWidget(host());
@@ -66,7 +67,7 @@ void main() {
 
     expect(find.text('Pregunta 1 de 9'), findsOneWidget);
     expect(find.text('Sueño'), findsOneWidget);
-    expect(find.text('¿Cuántas horas duermes normalmente?'), findsOneWidget);
+    expect(find.text('¿Cuántas horas de sueño tienes en promedio diariamente?'), findsOneWidget);
     expect(option('hours', 'less_5'), findsOneWidget);
     expect(find.text('¿Usas pantallas durante la última hora antes de dormir?'), findsNothing);
     expect(option('screen_before_bed', 'never'), findsNothing);
@@ -103,7 +104,7 @@ void main() {
     await tester.pumpWidget(host(initialStep: 3));
     await tester.pumpAndSettle();
 
-    await tester.tap(option('fast_food', 'rarely'));
+    await tester.tap(option('fast_food', 'never'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
@@ -221,7 +222,7 @@ void main() {
   });
 
   testWidgets('the summary counts only the answered questions', (tester) async {
-    answers = {'hours': '7_8', 'frequency': 'rarely'};
+    answers = {'hours': '7_8', 'frequency': 'none'};
     await tester.pumpWidget(host(initialStep: 8));
     await tester.pumpAndSettle();
 
