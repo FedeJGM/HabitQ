@@ -477,3 +477,15 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Alternativas descartadas:** (a) guardar rangos de altura y peso: pierden precisión para el IMC; (b) duplicar las animaciones del cuestionario en el onboarding: dos copias que se desincronizan; (c) convertir «Mi perfil» en wizard: la edición rápida es más útil allí; (d) borrar todos los registros de las preguntas 3–9: se perderían respuestas todavía válidas.
 
 **Pendiente:** el IMC es orientativo (no distingue masa muscular, edad ni sexo) y el modelo no debe usarlo para diagnosticar; las personas que ya habían respondido verán «Sin responder» en las preguntas borradas hasta que las contesten en «Mis hábitos». Hay que ejecutar `alembic upgrade head` en cada base de datos.
+
+---
+
+## D-33 — Ícono propio por pregunta del cuestionario de hábitos
+
+**Contexto:** el cuestionario solo mostraba el ícono de la categoría (pequeño, en la cabecera), así que las dos preguntas de sueño compartían la luna y ninguna ilustraba lo que se preguntaba.
+
+**Decisión (2026-11-02):** `HabitQuestion` gana el campo `icon` y cada una de las 9 preguntas define el suyo (cama, celular, hoja, comida rápida, pesa, silla, vaso, dispositivos y cara de estrés). `HabitWizard` lo dibuja centrado sobre el enunciado, en un círculo de 144 px con el mismo estilo del ícono de categoría, que no cambia. Es decorativo (`ExcludeSemantics`). El ícono «flota» con 20 px iguales entre la barra de progreso y el enunciado, y el contenido queda pegado arriba (`StepSwitcher` gana el parámetro `alignment`, centrado por defecto; solo el cuestionario usa `topCenter`) en lugar de centrado verticalmente, que dejaba el ícono lejos de la barra y pegado al texto. El contenido ya era desplazable, así que en pantallas bajas se llega a todas las opciones. El backend no cambia.
+
+**Alternativas descartadas:** (a) reemplazar el ícono de categoría: se pidió conservarlo; (b) ilustraciones propias: sin assets ni diseño aprobado, el paquete de símbolos ya está en el proyecto.
+
+**Pendiente:** ver las 9 preguntas en el teléfono y ajustar los íconos que no resulten claros.
