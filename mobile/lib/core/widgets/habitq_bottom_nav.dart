@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+
+import 'bounce_in.dart';
 
 enum HabitQTab { home, activity, stats, chat, profile }
 
@@ -21,28 +24,28 @@ class HabitQBottomNav extends StatelessWidget {
         onDestinationSelected: (index) => onSelected(HabitQTab.values[index]),
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+            icon: Icon(Symbols.home_rounded),
+            selectedIcon: BounceIn(child: Icon(Symbols.home_rounded, fill: 1)),
             label: 'Inicio',
           ),
           NavigationDestination(
-            icon: Icon(Icons.task_alt_outlined),
-            selectedIcon: Icon(Icons.task_alt),
+            icon: Icon(Symbols.task_alt_rounded),
+            selectedIcon: BounceIn(child: Icon(Symbols.task_alt_rounded, fill: 1)),
             label: 'Actividad',
           ),
           NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart),
+            icon: Icon(Symbols.bar_chart_rounded),
+            selectedIcon: BounceIn(child: Icon(Symbols.bar_chart_rounded, fill: 1)),
             label: 'Estadísticas',
           ),
           NavigationDestination(
-            icon: Icon(Icons.insights_outlined),
-            selectedIcon: Icon(Icons.insights),
+            icon: Icon(Symbols.insights_rounded),
+            selectedIcon: BounceIn(child: Icon(Symbols.insights_rounded, fill: 1)),
             label: 'Chat',
           ),
           NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore),
+            icon: Icon(Symbols.explore_rounded),
+            selectedIcon: BounceIn(child: Icon(Symbols.explore_rounded, fill: 1)),
             label: 'Perfil',
           ),
         ],

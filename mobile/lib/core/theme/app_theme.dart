@@ -1,7 +1,11 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
+import 'app_page_transitions.dart';
+
 /// Palette taken from the Figma design (HabitQ): brand green, navy text,
-/// link blue and accent blue. `legacy*` values keep the pre-redesign look for
+/// link blue and accent blue, extended with a sky blue so the app reads as sky
+/// blue, white and green. `legacy*` values keep the pre-redesign look for
 /// screens that must not change (consent).
 class AppColors {
   static const primary = Color(0xFF0CBC8B);
@@ -13,8 +17,27 @@ class AppColors {
   static const textSecondary = Color(0xFF5F6280);
   static const border = Color(0xFFCECECE);
   static const error = Color(0xFFDC2626);
-  static const navActive = Color(0xFFE8DEF8);
+  static const navActive = Color(0xFFBFE6F9);
   static const surfaceMuted = Color(0xFFE3E3E3);
+
+  /// Sky blue family. Text on any of these is always [textPrimary] (navy):
+  /// green on sky does not reach readable contrast.
+  static const sky = Color(0xFF8FD3F4);
+  static const skyLight = Color(0xFFE6F6FD);
+
+  /// Deeper sky for icons and chart details only, never for text.
+  static const skyDeep = Color(0xFF2E9BD6);
+
+  /// White fading into the lightest sky, behind every tab.
+  static const backgroundGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [background, skyLight],
+  );
+
+  /// Warm yellow of the Figma illustrations (the sun, the bike wheels). Used
+  /// only for celebration accents, never for text or controls.
+  static const sun = Color(0xFFF2C94C);
 
   static const legacyPrimary = Color(0xFF1BA97F);
   static const legacyAccent = Color(0xFFF2C94C);
@@ -34,6 +57,18 @@ class AppShadows {
 class AppTheme {
   static const fontFamily = 'Lexend';
 
+  /// Fade + short rise everywhere except iOS, which keeps its swipe-back push.
+  static const _pageTransitions = PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: FadeSlideTransitionsBuilder(),
+      TargetPlatform.fuchsia: FadeSlideTransitionsBuilder(),
+      TargetPlatform.linux: FadeSlideTransitionsBuilder(),
+      TargetPlatform.macOS: FadeSlideTransitionsBuilder(),
+      TargetPlatform.windows: FadeSlideTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+    },
+  );
+
   static ThemeData get light {
     const radius = 12.0;
     final scheme = ColorScheme.fromSeed(
@@ -49,6 +84,7 @@ class AppTheme {
       fontFamily: fontFamily,
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: scheme,
+      pageTransitionsTheme: _pageTransitions,
       textTheme: const TextTheme(
         headlineMedium: TextStyle(
           fontWeight: FontWeight.w700,

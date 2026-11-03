@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/error_notice.dart';
+import '../../core/widgets/skeleton.dart';
 import 'chat_service.dart';
 
 const _months = [
@@ -33,6 +37,8 @@ class _ConversationHistoryScreenState extends State<ConversationHistoryScreen> {
   late final ChatService _chatService;
   List<ConversationSummary> _conversations = [];
   bool _isLoading = true;
+  bool _loadFailed = false;
+  bool _errorIsConnection = false;
   String? _errorMessage;
 
   @override
@@ -43,6 +49,11 @@ class _ConversationHistoryScreenState extends State<ConversationHistoryScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _loadFailed = false;
+      _errorMessage = null;
+    });
     try {
       final conversations = await _chatService.fetchConversations();
       if (!mounted) return;
@@ -54,6 +65,8 @@ class _ConversationHistoryScreenState extends State<ConversationHistoryScreen> {
       if (!mounted) return;
       setState(() {
         _errorMessage = e.message;
+        _errorIsConnection = e is ApiConnectionException;
+        _loadFailed = true;
         _isLoading = false;
       });
     }
@@ -82,24 +95,24 @@ class _ConversationHistoryScreenState extends State<ConversationHistoryScreen> {
       appBar: AppBar(title: const Text('Historial de conversaciones')),
       body: SafeArea(
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Padding(padding: EdgeInsets.all(16), child: SkeletonList(count: 4))
             : Column(
                 children: [
                   if (_errorMessage != null)
                     Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Text(_errorMessage!, style: const TextStyle(color: AppColors.error)),
+                      child: ErrorNotice(
+                        message: _errorMessage!,
+                        isConnection: _errorIsConnection,
+                        onRetry: _loadFailed ? _load : null,
+                      ),
                     ),
                   Expanded(
                     child: _conversations.isEmpty
                         ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(24),
-                              child: Text(
-                                'Todavía no tenés conversaciones.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: AppColors.textSecondary),
-                              ),
+                            child: EmptyState(
+                              icon: Symbols.forum_rounded,
+                              title: 'Todavía no tenés conversaciones.',
                             ),
                           )
                         : ListView.builder(
@@ -110,12 +123,12 @@ class _ConversationHistoryScreenState extends State<ConversationHistoryScreen> {
                               return Card(
                                 child: ListTile(
                                   leading: const Icon(
-                                    Icons.chat_bubble_outline,
+                                    Symbols.chat_bubble_rounded,
                                     color: AppColors.primary,
                                   ),
                                   title: Text(_formatUpdatedAt(conversation.updatedAt)),
                                   trailing: IconButton(
-                                    icon: const Icon(Icons.delete_outline),
+                                    icon: const Icon(Symbols.delete_rounded),
                                     tooltip: 'Borrar conversación',
                                     onPressed: () => _handleDelete(conversation),
                                   ),

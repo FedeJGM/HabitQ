@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/app_routes.dart';
 import 'package:mobile/core/networking/api_client.dart';
+import 'package:mobile/core/widgets/error_notice.dart';
 import 'package:mobile/features/chat/chat_screen.dart';
 import 'package:mobile/features/chat/chat_service.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 class _FakeChatService implements ChatService {
   _FakeChatService({
@@ -69,7 +71,7 @@ ChatTurn _turn({
 /// Finds the send IconButton (find.byIcon matches the Icon glyph itself,
 /// which is nested inside the actual IconButton).
 Finder _sendButton() => find.ancestor(
-      of: find.byIcon(Icons.send),
+      of: find.byIcon(Symbols.send_rounded),
       matching: find.byType(IconButton),
     );
 
@@ -385,6 +387,50 @@ void main() {
     expect(fakeService.sentConversationIds, ['c1']);
   });
 
+  testWidgets('a failed send offers Reintentar, which asks the same question again once', (tester) async {
+    final fakeService = _FakeChatService(
+      error: ApiConnectionException(),
+      responses: [_turn(conversationId: 'c1', content: 'Aquí tienes la respuesta.')],
+    );
+    await tester.pumpWidget(buildApp(fakeService));
+    await tester.enterText(find.byType(TextField), '¿Cuánto debo dormir?');
+    await tester.pump();
+    await tester.tap(_sendButton());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ErrorNotice), findsOneWidget);
+    expect(find.textContaining('Revisa tu conexión'), findsOneWidget);
+
+    fakeService.error = null;
+    await tester.tap(find.text('Reintentar'));
+    await tester.pumpAndSettle();
+
+    expect(fakeService.sentMessages, ['¿Cuánto debo dormir?', '¿Cuánto debo dormir?']);
+    expect(find.text('¿Cuánto debo dormir?'), findsOneWidget);
+    expect(find.text('Aquí tienes la respuesta.'), findsOneWidget);
+    expect(find.byType(ErrorNotice), findsNothing);
+  });
+
+  testWidgets('a failed history load offers Reintentar', (tester) async {
+    final fakeService = _FakeChatService(
+      historyError: ApiException('No se pudo cargar la conversación.'),
+      historyMessages: [const ChatMessage(id: 'm1', role: 'user', content: 'Hola de nuevo')],
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: ChatScreen(chatService: fakeService, conversationId: 'c9')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ErrorNotice), findsOneWidget);
+
+    fakeService.historyError = null;
+    await tester.tap(find.text('Reintentar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hola de nuevo'), findsOneWidget);
+    expect(find.byType(ErrorNotice), findsNothing);
+    expect(fakeService.fetchMessagesConversationIds, ['c9', 'c9']);
+  });
+
   testWidgets('shows an error when loading history fails', (tester) async {
     final fakeService = _FakeChatService(
       historyError: ApiException('No se pudo cargar la conversación.'),
@@ -406,7 +452,7 @@ void main() {
       home: ChatScreen(chatService: fakeService),
     ));
 
-    await tester.tap(find.byIcon(Icons.history));
+    await tester.tap(find.byIcon(Symbols.history_rounded));
     await tester.pumpAndSettle();
 
     expect(find.text('History'), findsOneWidget);

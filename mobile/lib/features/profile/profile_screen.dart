@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
@@ -9,9 +10,10 @@ import '../auth/user.dart';
 import 'profile_options.dart';
 import 'profile_service.dart';
 
-/// View/edit screen for the profile captured during onboarding. Age range
-/// and main goal always save together (PUT /profile requires both), so
-/// tapping either chip autosaves the current values for both fields.
+/// View/edit screen for the profile captured during onboarding. PUT /profile
+/// replaces the whole profile, so every save sends the current values of all
+/// fields: tapping a chip autosaves, and height and weight are saved together
+/// with "Guardar medidas".
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.profileService, this.authService});
 
@@ -28,6 +30,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final ProfileService _profileService;
   String? _ageRange;
   String? _mainGoal;
+  String? _gender;
+  int? _heightCm;
+  double? _weightKg;
+  final _heightController = TextEditingController();
+  final _weightController = TextEditingController();
   bool _isLoading = true;
   bool _isSaving = false;
   String? _errorMessage;
@@ -39,6 +46,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _profileService = widget.profileService ?? ProfileService();
     _loadProfile();
     _loadUser();
+  }
+
+  @override
+  void dispose() {
+    _heightController.dispose();
+    _weightController.dispose();
+    super.dispose();
+  }
+
+  void _applyProfile(UserProfile profile) {
+    _ageRange = profile.ageRange;
+    _mainGoal = profile.mainGoal;
+    _gender = profile.gender;
+    _heightCm = profile.heightCm;
+    _weightKg = profile.weightKg;
+    _heightController.text = profile.heightCm == null ? '' : formatMeasure(profile.heightCm!);
+    _weightController.text = profile.weightKg == null ? '' : formatMeasure(profile.weightKg!);
   }
 
   Future<void> _loadUser() async {
@@ -58,8 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final profile = await _profileService.getProfile();
       if (!mounted) return;
       setState(() {
-        _ageRange = profile.ageRange;
-        _mainGoal = profile.mainGoal;
+        _applyProfile(profile);
         _isLoading = false;
       });
     } on ApiException catch (e) {
@@ -71,19 +94,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _save({required String ageRange, required String mainGoal}) async {
+  /// Saves the whole profile: the given fields replace the current ones, the
+  /// rest keep their last saved value.
+  Future<void> _save({
+    String? ageRange,
+    String? mainGoal,
+    String? gender,
+    int? heightCm,
+    double? weightKg,
+  }) async {
     setState(() {
       _isSaving = true;
       _errorMessage = null;
     });
 
     try {
-      final profile = await _profileService.saveProfile(ageRange: ageRange, mainGoal: mainGoal);
+      final profile = await _profileService.saveProfile(
+        ageRange: ageRange ?? _ageRange!,
+        mainGoal: mainGoal ?? _mainGoal!,
+        gender: gender ?? _gender,
+        heightCm: heightCm ?? _heightCm,
+        weightKg: weightKg ?? _weightKg,
+      );
       if (!mounted) return;
-      setState(() {
-        _ageRange = profile.ageRange;
-        _mainGoal = profile.mainGoal;
-      });
+      setState(() => _applyProfile(profile));
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _errorMessage = e.message);
@@ -116,6 +150,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Text(value ?? '-', style: Theme.of(context).textTheme.bodyLarge),
         ],
       ),
+    );
+  }
+
+  bool get _canSaveMeasures =>
+      !_isSaving &&
+      parseHeightCm(_heightController.text) != null &&
+      parseWeightKg(_weightController.text) != null;
+
+  void _saveMeasures() {
+    _save(
+      heightCm: parseHeightCm(_heightController.text),
+      weightKg: parseWeightKg(_weightController.text),
+    );
+  }
+
+  Widget _measureField({
+    required String fieldName,
+    required String label,
+    required String unit,
+    required TextEditingController controller,
+    required bool decimal,
+    required String? errorText,
+  }) {
+    return TextField(
+      key: ValueKey('profile-field:$fieldName'),
+      controller: controller,
+      keyboardType: TextInputType.numberWithOptions(decimal: decimal),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(decimal ? r'[0-9.,]' : r'[0-9]')),
+        LengthLimitingTextInputFormatter(decimal ? 6 : 3),
+      ],
+      onChanged: (_) => setState(() {}),
+      decoration: InputDecoration(labelText: label, suffixText: unit, errorText: errorText),
     );
   }
 
@@ -173,9 +240,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 16),
                   ],
                   if (_ageRange != null && _mainGoal != null) ...[
+                    _infoRow(context, 'Género', _labelFor(genderOptions, _gender)),
                     _infoRow(context, 'Edad', _labelFor(ageRangeOptions, _ageRange)),
+                    _infoRow(context, 'Altura', _heightCm == null ? null : '$_heightCm cm'),
+                    _infoRow(context, 'Peso', _weightKg == null ? null : '${formatMeasure(_weightKg!)} kg'),
                     _infoRow(context, 'Objetivo principal', _labelFor(mainGoalOptions, _mainGoal)),
                     const Divider(height: 32),
+                    Text(
+                      '¿Cuál es tu género?',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: genderOptions.map((option) {
+                        return ChoiceChip(
+                          key: ValueKey('gender:${option.value}'),
+                          label: Text(option.label),
+                          selected: _gender == option.value,
+                          onSelected: _isSaving ? null : (_) => _save(gender: option.value),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 24),
                     Text(
                       '¿Cuál es tu rango de edad?',
                       style: Theme.of(context).textTheme.titleMedium,
@@ -190,7 +278,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           selected: _ageRange == option.value,
                           onSelected: _isSaving
                               ? null
-                              : (_) => _save(ageRange: option.value, mainGoal: _mainGoal!),
+                              : (_) => _save(ageRange: option.value),
                         );
                       }).toList(),
                     ),
@@ -210,9 +298,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           selected: _mainGoal == option.value,
                           onSelected: _isSaving
                               ? null
-                              : (_) => _save(ageRange: _ageRange!, mainGoal: option.value),
+                              : (_) => _save(mainGoal: option.value),
                         );
                       }).toList(),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Altura y peso',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    _measureField(
+                      fieldName: 'height',
+                      label: 'Altura',
+                      unit: 'cm',
+                      controller: _heightController,
+                      decimal: false,
+                      errorText: _heightController.text.trim().isNotEmpty &&
+                              parseHeightCm(_heightController.text) == null
+                          ? heightErrorText
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    _measureField(
+                      fieldName: 'weight',
+                      label: 'Peso',
+                      unit: 'kg',
+                      controller: _weightController,
+                      decimal: true,
+                      errorText: _weightController.text.trim().isNotEmpty &&
+                              parseWeightKg(_weightController.text) == null
+                          ? weightErrorText
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: _canSaveMeasures ? _saveMeasures : null,
+                      child: const Text('Guardar medidas'),
                     ),
                   ],
                   const SizedBox(height: 32),

@@ -619,14 +619,86 @@ def test_build_user_context_with_profile_and_habits() -> None:
 def test_build_user_context_describes_every_habit_question_in_plain_spanish() -> None:
     habits = [
         HabitRecord(user_id=uuid.uuid4(), domain="sleep", key="screen_before_bed", value="often"),
-        HabitRecord(user_id=uuid.uuid4(), domain="nutrition", key="fast_food", value="weekly_3_plus"),
-        HabitRecord(user_id=uuid.uuid4(), domain="screen_time", key="recreational_hours", value="more_4h"),
+        HabitRecord(user_id=uuid.uuid4(), domain="nutrition", key="fast_food", value="daily"),
+        HabitRecord(user_id=uuid.uuid4(), domain="screen_time", key="recreational_hours", value="4_6h"),
     ]
     context = build_user_context(None, habits)
     assert "Frecuentemente" in context
-    assert "3 o más veces por semana" in context
-    assert "Más de 4 horas" in context
-    assert "weekly_3_plus" not in context
+    assert "Todos los días" in context
+    assert "4–6 h" in context
+    assert "4_6h" not in context
+
+
+def test_build_user_context_describes_the_reformulated_questions() -> None:
+    habits = [
+        HabitRecord(user_id=uuid.uuid4(), domain="nutrition", key="fruits_vegetables", value="3_plus"),
+        HabitRecord(user_id=uuid.uuid4(), domain="nutrition", key="fast_food", value="weekly_4_6"),
+        HabitRecord(user_id=uuid.uuid4(), domain="physical_activity", key="days_per_week", value="0"),
+        HabitRecord(user_id=uuid.uuid4(), domain="physical_activity", key="sedentary_hours", value="7_9h"),
+        HabitRecord(user_id=uuid.uuid4(), domain="hydration", key="daily_intake", value="2_3l"),
+        HabitRecord(user_id=uuid.uuid4(), domain="screen_time", key="recreational_hours", value="more_6h"),
+        HabitRecord(user_id=uuid.uuid4(), domain="stress", key="frequency", value="3_4"),
+    ]
+    context = build_user_context(None, habits)
+    assert "Veces al día que incluye frutas o verduras: 3 o más veces" in context
+    assert "Comida rápida o ultraprocesados a la semana: 4–6 veces" in context
+    assert "Días a la semana que hace ejercicio: Ninguno" in context
+    assert "Horas al día sentado: 7–9 h" in context
+    assert "Litros de agua al día: 2–3 L" in context
+    assert "Tiempo diario frente a dispositivos electrónicos: Más de 6 h" in context
+    assert "Días a la semana con estrés que afecta la rutina (último mes): 3–4 días" in context
+    assert "weekly_4_6" not in context
+
+
+def test_build_user_context_includes_gender_height_weight_and_bmi() -> None:
+    profile = Profile(
+        user_id=uuid.uuid4(),
+        age_range="25-34",
+        main_goal="sleep_better",
+        gender="female",
+        height_cm=170,
+        weight_kg=65,
+    )
+    context = build_user_context(profile, [])
+    assert "Femenino" in context
+    assert "170 cm" in context
+    assert "65 kg" in context
+    assert "IMC 22.5" in context
+    assert "female" not in context
+
+
+def test_build_user_context_labels_every_gender_option() -> None:
+    expected = {
+        "female": "Femenino",
+        "male": "Masculino",
+        "other": "Otro",
+        "prefer_not_to_say": "Prefiere no decir",
+    }
+    for code, label in expected.items():
+        profile = Profile(
+            user_id=uuid.uuid4(), age_range="25-34", main_goal="sleep_better", gender=code
+        )
+        context = build_user_context(profile, [])
+        assert label in context, code
+        assert code not in context, code
+
+
+def test_build_user_context_skips_bmi_without_height_or_weight() -> None:
+    only_weight = Profile(
+        user_id=uuid.uuid4(), age_range="25-34", main_goal="sleep_better", weight_kg=70
+    )
+    context = build_user_context(only_weight, [])
+    assert "70 kg" in context
+    assert "IMC" not in context
+    assert " cm" not in context
+
+
+def test_build_user_context_without_physical_data_has_no_physical_fields() -> None:
+    profile = Profile(user_id=uuid.uuid4(), age_range="25-34", main_goal="sleep_better")
+    context = build_user_context(profile, [])
+    assert "IMC" not in context
+    assert " kg" not in context
+    assert " cm" not in context
 
 
 def test_build_user_context_falls_back_to_raw_codes_for_unknown_habits() -> None:

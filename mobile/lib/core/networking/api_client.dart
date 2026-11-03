@@ -13,6 +13,14 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+/// The server could not be reached at all (no network, Tailscale off, timeout).
+/// It is an [ApiException], so existing handlers keep working; screens use the
+/// subtype to suggest checking the connection.
+class ApiConnectionException extends ApiException {
+  ApiConnectionException()
+      : super('No se pudo conectar con el servidor. Verifica tu conexión.');
+}
+
 class ApiClient {
   ApiClient({http.Client? client, Future<String?> Function()? tokenProvider})
       : _client = client ?? http.Client(),
@@ -74,7 +82,7 @@ class ApiClient {
     try {
       return await request();
     } catch (_) {
-      throw ApiException('No se pudo conectar con el servidor. Verifica tu conexión.');
+      throw ApiConnectionException();
     }
   }
 

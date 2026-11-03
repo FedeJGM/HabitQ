@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../theme/app_theme.dart';
 
@@ -14,7 +15,7 @@ class HabitQHeader extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: AppColors.skyLight,
       child: SafeArea(
         bottom: false,
         child: SizedBox(
@@ -24,10 +25,12 @@ class HabitQHeader extends StatelessWidget implements PreferredSizeWidget {
             child: Row(
               children: [
                 Image.asset(
-                  'assets/images/logo_hq.png',
+                  'assets/images/logo_hq_clean.png',
                   width: 42,
                   height: 44,
                   fit: BoxFit.cover,
+                  // The asset is 1024 px but shows at 42 dp: decode it small.
+                  cacheWidth: 126,
                   excludeFromSemantics: true,
                 ),
                 const Expanded(
@@ -38,14 +41,17 @@ class HabitQHeader extends StatelessWidget implements PreferredSizeWidget {
                       fontFamily: AppTheme.fontFamily,
                       fontWeight: FontWeight.w700,
                       fontSize: 22,
-                      color: AppColors.primary,
+                      color: AppColors.primaryDark,
                     ),
                   ),
                 ),
                 IconButton(
                   onPressed: onLogout,
-                  icon: const Icon(Icons.logout, color: AppColors.primary),
+                  icon: const Icon(Symbols.logout_rounded,
+                      color: AppColors.primary),
                   tooltip: 'Cerrar sesión',
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
                 ),
               ],
             ),
