@@ -12,6 +12,10 @@ void main() {
     expect({for (final q in questions) q.key}, hasLength(9));
   });
 
+  test('every question has its own distinct icon', () {
+    expect({for (final q in questions) q.icon}, hasLength(9));
+  });
+
   test('every question offers distinct, non-empty options', () {
     for (final q in questions) {
       expect(q.options.length, greaterThanOrEqualTo(3), reason: q.key);

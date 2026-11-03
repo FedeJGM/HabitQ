@@ -168,11 +168,12 @@ class _HabitWizardState extends State<HabitWizard> with SingleTickerProviderStat
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _header(),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 8),
                   Expanded(
                     child: StepSwitcher(
                       step: _step,
                       direction: _direction,
+                      alignment: Alignment.topCenter,
                       child: _onSummary ? _summary() : _question(_steps[_step].question),
                     ),
                   ),
@@ -269,6 +270,22 @@ class _HabitWizardState extends State<HabitWizard> with SingleTickerProviderStat
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const SizedBox(height: 12),
+        Center(
+          child: Container(
+            key: const ValueKey('question-icon'),
+            width: 144,
+            height: 144,
+            decoration: BoxDecoration(
+              color: AppColors.sky.withValues(alpha: 0.6),
+              shape: BoxShape.circle,
+            ),
+            child: ExcludeSemantics(
+              child: Icon(question.icon, fill: 1, size: 76, color: AppColors.textPrimary),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
         Text(
           question.prompt,
           style: const TextStyle(

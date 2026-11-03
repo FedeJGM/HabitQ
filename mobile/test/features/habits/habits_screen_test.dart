@@ -152,6 +152,7 @@ void main() {
     final service = _FakeHabitsService(records: const [sleepHoursRecord, sleepScreenRecord]);
     await open(tester, service);
 
+    await tester.ensureVisible(find.byKey(const ValueKey('hours:7_8')));
     await tester.tap(find.byKey(const ValueKey('hours:7_8')));
     await tester.pumpAndSettle();
 

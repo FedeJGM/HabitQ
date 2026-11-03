@@ -1,3 +1,6 @@
+import 'package:flutter/widgets.dart';
+import 'package:material_symbols_icons/symbols.dart';
+
 class HabitOption {
   const HabitOption(this.value, this.label);
 
@@ -11,6 +14,7 @@ class HabitQuestion {
     required this.key,
     required this.prompt,
     required this.options,
+    required this.icon,
     this.hint,
   });
 
@@ -18,6 +22,10 @@ class HabitQuestion {
   final String key;
   final String prompt;
   final List<HabitOption> options;
+
+  /// Icon specific to this question, shown above the prompt (distinct from
+  /// the category badge in the wizard header).
+  final IconData icon;
 
   /// Optional clarification shown under the prompt (e.g. what a glass is).
   final String? hint;
@@ -42,6 +50,7 @@ const habitDomainSections = [
       HabitQuestion(
         domain: 'sleep',
         key: 'hours',
+        icon: Symbols.hotel_rounded,
         prompt: '¿Cuántas horas de sueño tienes en promedio diariamente?',
         options: [
           HabitOption('less_5', 'Menos de 5'),
@@ -53,6 +62,7 @@ const habitDomainSections = [
       HabitQuestion(
         domain: 'sleep',
         key: 'screen_before_bed',
+        icon: Symbols.phone_android_rounded,
         prompt: '¿Usas pantallas durante la última hora antes de dormir?',
         options: [
           HabitOption('never', 'Nunca'),
@@ -68,6 +78,7 @@ const habitDomainSections = [
       HabitQuestion(
         domain: 'nutrition',
         key: 'fruits_vegetables',
+        icon: Symbols.eco_rounded,
         prompt: '¿Cuántas veces al día incluyes frutas o verduras en tus comidas?',
         options: [
           HabitOption('none', 'Ninguna'),
@@ -79,6 +90,7 @@ const habitDomainSections = [
       HabitQuestion(
         domain: 'nutrition',
         key: 'fast_food',
+        icon: Symbols.fastfood_rounded,
         prompt: '¿Con qué frecuencia consumes comida rápida o ultraprocesados a la semana?',
         options: [
           HabitOption('never', 'Nunca'),
@@ -95,6 +107,7 @@ const habitDomainSections = [
       HabitQuestion(
         domain: 'physical_activity',
         key: 'days_per_week',
+        icon: Symbols.fitness_center_rounded,
         prompt: '¿Cuántos días a la semana haces ejercicio (gimnasio, trotar, deporte)?',
         options: [
           HabitOption('0', 'Ninguno'),
@@ -106,6 +119,7 @@ const habitDomainSections = [
       HabitQuestion(
         domain: 'physical_activity',
         key: 'sedentary_hours',
+        icon: Symbols.chair_rounded,
         prompt: '¿Cuántas horas al día pasas sentado (estudio, trabajo, transporte u ocio)?',
         options: [
           HabitOption('less_4h', 'Menos de 4 h'),
@@ -122,6 +136,7 @@ const habitDomainSections = [
       HabitQuestion(
         domain: 'hydration',
         key: 'daily_intake',
+        icon: Symbols.local_drink_rounded,
         prompt: '¿Cuántos litros de agua tomas al día?',
         hint: '1 vaso ≈ 250 ml',
         options: [
@@ -139,6 +154,7 @@ const habitDomainSections = [
       HabitQuestion(
         domain: 'screen_time',
         key: 'recreational_hours',
+        icon: Symbols.devices_rounded,
         prompt:
             '¿Cuánto tiempo diario pasas frente a dispositivos electrónicos (portátiles, celular, tablet, televisor)?',
         options: [
@@ -156,6 +172,7 @@ const habitDomainSections = [
       HabitQuestion(
         domain: 'stress',
         key: 'frequency',
+        icon: Symbols.sentiment_stressed_rounded,
         prompt: 'En el último mes, ¿cuántos días a la semana sientes estrés que afecta tu rutina?',
         options: [
           HabitOption('none', 'Ninguno'),

@@ -18,17 +18,26 @@ class StepSwitcher extends StatelessWidget {
     required this.step,
     required this.direction,
     required this.child,
+    this.alignment = Alignment.center,
   });
 
   final int step;
   final int direction;
   final Widget child;
 
+  /// Where the content sits inside the available space. Centered by default;
+  /// use [Alignment.topCenter] to keep it right under the header.
+  final AlignmentGeometry alignment;
+
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
       duration: AppMotion.medium,
       switchInCurve: AppMotion.enter,
+      layoutBuilder: (current, previous) => Stack(
+        alignment: alignment,
+        children: [...previous, if (current != null) current],
+      ),
       transitionBuilder: (child, animation) {
         final entering = child.key == ValueKey(step);
         final offset = Tween<Offset>(

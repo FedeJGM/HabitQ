@@ -141,6 +141,7 @@ void main() {
       await tester.pumpAndSettle();
     }
     expect(find.text('Pregunta 1 de 9'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('hours:more_8')));
     await tester.tap(find.byKey(const ValueKey('hours:more_8')));
     await tester.pumpAndSettle();
     for (var i = 0; i < 8; i++) {

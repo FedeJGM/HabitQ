@@ -73,6 +73,40 @@ void main() {
     expect(option('screen_before_bed', 'never'), findsNothing);
   });
 
+  testWidgets('each question shows its own icon above the prompt, besides the category badge',
+      (tester) async {
+    final questions = [for (final s in habitDomainSections) ...s.questions];
+    for (var i = 0; i < questions.length; i++) {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(host(initialStep: i));
+      await tester.pumpAndSettle();
+
+      final icon = find.byKey(const ValueKey('question-icon'));
+      expect(icon, findsOneWidget, reason: questions[i].key);
+      expect(find.descendant(of: icon, matching: find.byIcon(questions[i].icon)), findsOneWidget,
+          reason: questions[i].key);
+      expect(tester.getSize(icon), const Size(144, 144));
+      expect(tester.getBottomLeft(icon).dy,
+          lessThan(tester.getTopLeft(find.text(questions[i].prompt)).dy),
+          reason: questions[i].key);
+    }
+  });
+
+  testWidgets('the question icon floats centered, with equal space above and below', (tester) async {
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+
+    final icon = find.byKey(const ValueKey('question-icon'));
+    final bar = find.byKey(const ValueKey('wizard-progress'));
+    final prompt = find.text('¿Cuántas horas de sueño tienes en promedio diariamente?');
+    expect(tester.getCenter(icon).dx, closeTo(tester.getCenter(bar).dx, 0.5));
+
+    final above = tester.getTopLeft(icon).dy - tester.getBottomLeft(bar).dy;
+    final below = tester.getTopLeft(prompt).dy - tester.getBottomLeft(icon).dy;
+    expect(above, closeTo(below, 2));
+    expect(above, inInclusiveRange(16, 28));
+  });
+
   testWidgets('the progress bar grows with the step', (tester) async {
     await tester.pumpWidget(host(initialStep: 3));
     await tester.pumpAndSettle();
