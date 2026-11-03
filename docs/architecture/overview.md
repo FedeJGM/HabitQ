@@ -93,7 +93,7 @@ lib/
 │   ├── home/         # HomeScreen (hub de navegación)
 │   ├── activity/     # ActivityScreen (checklist diario), TasksService, ReminderService (+ LocalNotificationGateway sobre flutter_local_notifications)
 │   ├── stats/        # StatsScreen (cumplimiento de 7 días con fl_chart y resumen de hábitos), StatsService
-│   ├── habits/       # HabitsScreen (ver/editar), HabitWizard (una pregunta por paso, con el ícono propio de cada pregunta; usa StepSwitcher/OptionTile de core/widgets/step_flow.dart), DomainBurst y habit_domain_visuals (ícono y animación por categoría), HabitsService, habit_questions.dart (preguntas, opciones e ícono; metadata compartida)
+│   ├── habits/       # HabitsScreen (ver/editar), HabitWizard (una pregunta por paso, con el ícono propio de cada pregunta; usa StepSwitcher/OptionTile de core/widgets/step_flow.dart), DomainBurst y habit_domain_visuals (animación por categoría), HabitsService, habit_questions.dart (preguntas, opciones e ícono; metadata compartida)
 │   ├── profile/      # ProfileScreen (ver/editar), ProfileService, profile_options.dart (metadata compartida)
 │   └── chat/         # ChatScreen (conversación en vivo), ConversationHistoryScreen, ChatService
 └── app_routes.dart   # tabla central de rutas nombradas

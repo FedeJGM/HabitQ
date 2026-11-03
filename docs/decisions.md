@@ -489,3 +489,13 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 **Alternativas descartadas:** (a) reemplazar el ícono de categoría: se pidió conservarlo; (b) ilustraciones propias: sin assets ni diseño aprobado, el paquete de símbolos ya está en el proyecto.
 
 **Verificado (2026-11-02):** la responsable revisó en el teléfono los íconos por pregunta y su posición simétrica, y confirmó que quedaron como se pedía. Cambiar un ícono que no resulte claro es una línea en `habit_questions.dart`.
+
+---
+
+## D-34 — El cuestionario de hábitos deja de mostrar el ícono de la categoría
+
+**Contexto:** con el ícono propio de cada pregunta (D-33), el ícono pequeño de la categoría en la cabecera (la luna de Sueño, etc.) repetía información y competía con él. D-33 había dicho que se conservaba.
+
+**Decisión (2026-11-03):** la cabecera del `HabitWizard` muestra solo el nombre de la categoría y «Pregunta N de 9». Se elimina `DomainVisual.badge`, que ya no tenía otro uso; `DomainVisual` sigue definiendo la animación por categoría al responder (`DomainBurst`), que no cambia. Reemplaza lo que decía D-33 sobre conservar el ícono de categoría.
+
+**Alternativas descartadas:** dejar el campo `badge` sin usar «por si acaso»: es código muerto, y recuperarlo desde el historial es trivial.
