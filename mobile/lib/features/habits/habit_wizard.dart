@@ -10,7 +10,6 @@ import '../../core/widgets/celebration/celebration_overlay.dart';
 import '../../core/widgets/decor/background_shapes.dart';
 import '../../core/widgets/step_flow.dart';
 import 'domain_burst.dart';
-import 'habit_domain_visuals.dart';
 import 'habit_questions.dart';
 
 /// Habit questionnaire shown one question at a time, with a progress bar and
@@ -217,26 +216,12 @@ class _HabitWizardState extends State<HabitWizard> with SingleTickerProviderStat
   Widget _header() {
     final onQuestion = !_onSummary;
     final step = onQuestion ? _steps[_step] : null;
-    final visual = step == null ? null : DomainVisual.of(step.question.domain);
     final progress = onQuestion ? (_step + 1) / _total : 1.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            if (visual != null)
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.sky.withValues(alpha: 0.6),
-                  shape: BoxShape.circle,
-                ),
-                child: ExcludeSemantics(
-                  child: Icon(visual.badge, fill: 1, size: 22, color: AppColors.textPrimary),
-                ),
-              ),
-            if (visual != null) const SizedBox(width: 12),
             Expanded(
               child: Text(
                 step?.domainTitle ?? 'Resumen',

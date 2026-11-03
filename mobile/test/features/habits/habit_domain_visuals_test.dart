@@ -41,13 +41,4 @@ void main() {
     expect(visual.isFallback, isTrue);
     expect(visual.particles, isNotEmpty);
   });
-
-  test('each domain has a badge icon for the questionnaire header', () {
-    final icons = {
-      for (final domain in ['sleep', 'nutrition', 'physical_activity', 'hydration', 'screen_time', 'stress'])
-        DomainVisual.of(domain).badge,
-    };
-
-    expect(icons.length, 6);
-  });
 }
