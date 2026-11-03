@@ -107,6 +107,22 @@ void main() {
     expect(above, inInclusiveRange(16, 28));
   });
 
+  testWidgets('the header shows only the category name, with no category icon', (tester) async {
+    var step = 0;
+    for (final section in habitDomainSections) {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(host(initialStep: step));
+      await tester.pumpAndSettle();
+
+      expect(find.text(section.title), findsOneWidget, reason: section.title);
+      final headerRow = find.ancestor(of: find.text(section.title), matching: find.byType(Row)).first;
+      expect(find.descendant(of: headerRow, matching: find.byType(Icon)), findsNothing,
+          reason: section.title);
+      expect(find.byKey(const ValueKey('question-icon')), findsOneWidget, reason: section.title);
+      step += section.questions.length;
+    }
+  });
+
   testWidgets('the progress bar grows with the step', (tester) async {
     await tester.pumpWidget(host(initialStep: 3));
     await tester.pumpAndSettle();

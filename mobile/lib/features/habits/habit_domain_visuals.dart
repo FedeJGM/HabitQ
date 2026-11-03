@@ -34,68 +34,59 @@ class IconParticle extends BurstParticle {
   final IconData icon;
 }
 
-/// The look of one habit domain: the header badge and the particles that fly
-/// when the user answers a question of that domain. The animation depends on
-/// the category only, never on the answer, so it carries no judgement.
+/// The look of one habit domain: the particles that fly when the user answers
+/// a question of that domain. The animation depends on the category only,
+/// never on the answer, so it carries no judgement.
 class DomainVisual {
   const DomainVisual({
-    required this.badge,
     required this.motion,
     required this.particles,
     required this.colors,
     this.isFallback = false,
   });
 
-  final IconData badge;
   final BurstMotion motion;
   final List<BurstParticle> particles;
   final List<Color> colors;
   final bool isFallback;
 
   static const _sleep = DomainVisual(
-    badge: Symbols.bedtime_rounded,
     motion: BurstMotion.floatUp,
     particles: [LetterParticle('z'), LetterParticle('Z'), LetterParticle('z'), IconParticle(Symbols.bedtime_rounded)],
     colors: [AppColors.skyDeep, AppColors.sky, AppColors.primaryDark],
   );
 
   static const _nutrition = DomainVisual(
-    badge: Symbols.nutrition_rounded,
     motion: BurstMotion.radial,
     particles: [IconParticle(Symbols.nutrition_rounded), IconParticle(Symbols.eco_rounded)],
     colors: [AppColors.primary, AppColors.primaryDark, AppColors.sun],
   );
 
   static const _activity = DomainVisual(
-    badge: Symbols.directions_run_rounded,
     motion: BurstMotion.radial,
     particles: [IconParticle(Symbols.bolt_rounded), IconParticle(Symbols.directions_run_rounded)],
     colors: [AppColors.sun, AppColors.primary, AppColors.skyDeep],
   );
 
   static const _hydration = DomainVisual(
-    badge: Symbols.water_drop_rounded,
     motion: BurstMotion.fall,
     particles: [IconParticle(Symbols.water_drop_rounded)],
     colors: [AppColors.skyDeep, AppColors.sky, AppColors.accent],
   );
 
   static const _screens = DomainVisual(
-    badge: Symbols.smartphone_rounded,
     motion: BurstMotion.floatUp,
     particles: [IconParticle(Symbols.smartphone_rounded), IconParticle(Symbols.visibility_rounded)],
     colors: [AppColors.skyDeep, AppColors.accent, AppColors.sky],
   );
 
   static const _stress = DomainVisual(
-    badge: Symbols.spa_rounded,
     motion: BurstMotion.floatUp,
     particles: [IconParticle(Symbols.spa_rounded), IconParticle(Symbols.eco_rounded)],
     colors: [AppColors.primary, AppColors.sky, AppColors.primaryDark],
   );
 
   static const _fallback = DomainVisual(
-    badge: Symbols.auto_awesome_rounded,
     motion: BurstMotion.radial,
     particles: [IconParticle(Symbols.auto_awesome_rounded)],
     colors: [AppColors.primary, AppColors.sky],
