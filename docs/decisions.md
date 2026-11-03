@@ -488,4 +488,4 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Alternativas descartadas:** (a) reemplazar el ícono de categoría: se pidió conservarlo; (b) ilustraciones propias: sin assets ni diseño aprobado, el paquete de símbolos ya está en el proyecto.
 
-**Pendiente:** ver las 9 preguntas en el teléfono y ajustar los íconos que no resulten claros.
+**Verificado (2026-11-02):** la responsable revisó en el teléfono los íconos por pregunta y su posición simétrica, y confirmó que quedaron como se pedía. Cambiar un ícono que no resulte claro es una línea en `habit_questions.dart`.
