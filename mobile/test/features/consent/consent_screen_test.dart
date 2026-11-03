@@ -33,6 +33,12 @@ void main() {
     expect(find.text('Acepto y continúo'), findsOneWidget);
   });
 
+  testWidgets('the consent text mentions the physical data that is stored', (tester) async {
+    await tester.pumpWidget(buildApp(_FakeConsentStorage()));
+
+    expect(find.textContaining('género, altura, peso'), findsOneWidget);
+  });
+
   testWidgets('accepting records consent and navigates to nextRoute', (tester) async {
     final fakeStorage = _FakeConsentStorage();
     await tester.pumpWidget(buildApp(fakeStorage));

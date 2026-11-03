@@ -36,7 +36,7 @@ Capas, de afuera hacia adentro:
 
 ### Regla de seguridad aplicada consistentemente
 
-Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos obtienen el usuario desde el JWT vía `get_current_user` (plan, sección 10). `PUT /habits/{id}` además verifica que el registro pertenezca al usuario autenticado antes de modificarlo, devolviendo 404 (no 403) si no es así, para no filtrar la existencia de registros ajenos.
+Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos obtienen el usuario desde el JWT vía `get_current_user` (plan, sección 10). `PUT /habits/{id}` además verifica que el registro pertenezca al usuario autenticado antes de modificarlo, devolviendo 404 (no 403) si no es así, para no filtrar la existencia de registros ajenos. Lo mismo hacen `PUT /tasks/{id}`, `DELETE /tasks/{id}` y `PUT /tasks/{id}/progress`: una tarea ajena, inexistente o ya archivada responde 404.
 
 ### Endpoints actuales
 
@@ -59,6 +59,7 @@ Ningún endpoint privado confía en un `user_id` enviado por el cliente. Todos o
 | PUT | `/tasks/{id}` | Sí | Cambia o quita (`null`) la hora del recordatorio (404 si no existe, es ajena o está archivada) |
 | DELETE | `/tasks/{id}` | Sí | Archiva la tarea y conserva su historial (204) |
 | PUT | `/tasks/{id}/progress` | Sí | Guarda el progreso de un día (`day`, `progress` de 0 a la meta); `day` debe estar a ±1 día de la fecha UTC del servidor |
+| GET | `/tasks/stats?day=AAAA-MM-DD` | Sí | Cumplimiento de los 7 días que terminan en `day` (fecha local de la persona, a ±1 día de la fecha UTC; 422 si no): por día `active` y `completed`, promedio de las tareas con contador y el mejor día (D-28). Aplica las mismas reglas de visibilidad que `GET /tasks` |
 | POST | `/chat` | Sí | Retrieval + Gemini (con personalización) en una conversación, nueva o existente; persiste ambos mensajes de forma atómica. Devuelve `sources` (título, organización, URL, autores, año, DOI y páginas recuperadas) y las guarda con el mensaje del asistente |
 | GET | `/chat/conversations` | Sí | Lista las conversaciones del usuario, más reciente primero |
 | GET | `/chat/conversations/{id}/messages` | Sí | Mensajes de una conversación propia, orden cronológico; cada uno trae sus `sources` (lista vacía si no tiene) (404 si no existe o es de otro usuario) |
@@ -91,7 +92,8 @@ lib/
 │   ├── onboarding/    # OnboardingScreen (perfil), OnboardingHabitsScreen (9 preguntas), OnboardingService
 │   ├── home/         # HomeScreen (hub de navegación)
 │   ├── activity/     # ActivityScreen (checklist diario), TasksService, ReminderService (+ LocalNotificationGateway sobre flutter_local_notifications)
-│   ├── habits/       # HabitsScreen (ver/editar), HabitsService, habit_questions.dart (metadata compartida)
+│   ├── stats/        # StatsScreen (cumplimiento de 7 días con fl_chart y resumen de hábitos), StatsService
+│   ├── habits/       # HabitsScreen (ver/editar), HabitWizard (una pregunta por paso, con el ícono propio de cada pregunta; usa StepSwitcher/OptionTile de core/widgets/step_flow.dart), DomainBurst y habit_domain_visuals (animación por categoría), HabitsService, habit_questions.dart (preguntas, opciones e ícono; metadata compartida)
 │   ├── profile/      # ProfileScreen (ver/editar), ProfileService, profile_options.dart (metadata compartida)
 │   └── chat/         # ChatScreen (conversación en vivo), ConversationHistoryScreen, ChatService
 └── app_routes.dart   # tabla central de rutas nombradas
@@ -118,7 +120,11 @@ Login ──(sign-in exitoso)──▶ ¿consentimiento local aceptado?
 
 Desde Home: navegación a Mis Hábitos, Perfil y Chat (las tres reales). En Home, el chat es un botón único («Chat con HabitQ») hasta que existe alguna conversación; a partir de ahí son dos: «Continuar conversación» (abre la más reciente) y «Nuevo chat con HabitQ». Desde el Chat, un ícono en el `AppBar` navega al historial de conversaciones.
 
-La barra inferior tiene cuatro pestañas: Inicio, **Actividad**, Chat y Perfil (D-23). Actividad es el checklist diario: franja semanal (hoy editable, días pasados en solo lectura), tareas con casilla o contador, botón del lápiz para elegir tareas de un catálogo por objetivo y recordatorios locales por tarea (D-24, D-25). Los recordatorios los programa el propio teléfono, sin servidor: `ReminderService` decide qué programar y `LocalNotificationGateway` habla con el plugin de notificaciones; al cerrar sesión se cancelan todos.
+La barra inferior tiene cinco pestañas: Inicio, **Actividad**, **Estadísticas**, Chat y Perfil (D-23, D-28). Actividad es el checklist diario: franja semanal (hoy editable, días pasados en solo lectura), tareas con casilla o contador, botón del lápiz para elegir tareas de un catálogo por objetivo y recordatorios locales por tarea (D-24, D-25). Los recordatorios los programa el propio teléfono, sin servidor: `ReminderService` decide qué programar y `LocalNotificationGateway` habla con el plugin de notificaciones; al cerrar sesión se cancelan todos.
+
+### Estadísticas
+
+`StatsScreen` (D-28) muestra los últimos 7 días terminando hoy, con la fecha local de la persona. `StatsService.fetchStats` llama a `GET /tasks/stats?day=` y la pantalla dibuja con `fl_chart` las barras de cumplimiento por día (tareas completadas sobre tareas activas, con el eje vertical marcado cada 25 %), el resumen «Hoy: X de Y tareas», el mejor día y el promedio de cada tarea con contador. Si ningún día tuvo tareas, muestra un mensaje con un botón hacia Actividad. Debajo, el resumen de hábitos es una lista de solo lectura por dominio con las respuestas actuales del cuestionario: reutiliza `HabitsService.fetchHabits` y las etiquetas de `habit_questions.dart`, empareja por dominio y clave, usa el registro más reciente cuando una pregunta tiene varios y muestra «Sin responder» si falta. Cada fuente falla por separado: un error al leer los hábitos no oculta los gráficos. La etiqueta de la barra inferior baja a 11 sp para que «Estadísticas» quepa en una pantalla de 360 dp con cinco pestañas.
 
 ### Chat (RAG)
 
@@ -132,7 +138,7 @@ La barra inferior tiene cuatro pestañas: Inicio, **Actividad**, Chat y Perfil (
 
 Todo widget con lógica async (`OnboardingScreen`, `HabitsScreen`, `ProfileScreen`, `HomeScreen`, `ConsentScreen`, etc.) acepta su servicio por constructor (`this.habitsService`, `this.profileService`, ...) con fallback a la construcción real (`?? HabitsService()`). Esto permite testear cada pantalla con un fake sin tocar red ni almacenamiento real.
 
-**Excepción deliberada:** código que depende directamente de `FlutterSecureStorage` (`AuthService.signOut()`, `TokenStorage`, `ConsentStorage`) no tiene test unitario que ejercite su cuerpo real. Se comprobó empíricamente que una llamada real a `FlutterSecureStorage` sin mock **cuelga indefinidamente** un `testWidgets()` (no lanza excepción). Estas piezas solo se verifican vía los fakes que las sobreescriben por completo en los tests de las pantallas que las consumen.
+**Excepción deliberada:** código que depende directamente de `FlutterSecureStorage` (`TokenStorage`, `ConsentStorage`) no tiene test unitario que ejercite su cuerpo real. `AuthService.signOut()` sí se testea, porque `AuthService` recibe `GoogleSignIn` y el almacenamiento por constructor. Se comprobó empíricamente que una llamada real a `FlutterSecureStorage` sin mock **cuelga indefinidamente** un `testWidgets()` (no lanza excepción). Estas piezas solo se verifican vía los fakes que las sobreescriben por completo en los tests de las pantallas que las consumen.
 
 ## Administración de la base de conocimiento
 

@@ -76,6 +76,8 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Consecuencias:** cualquier otro mockup en `Diseño/` debe revisarse con el mismo criterio antes de implementarlo — puede reflejar una exploración visual anterior al recorte de alcance del MVP.
 
+**Actualización (2026-10-15):** la pestaña «Actividad» del mockup se implementó después, limitada a un checklist diario y sin gamificación ni estadísticas (D-23). Lo demás de esta decisión sigue vigente. **Actualización (2026-10-21):** la ausencia de un tab de estadísticas se reabrió después en D-28.
+
 ---
 
 ## D-08 — Consentimiento inicial: persistencia local, no en backend
@@ -108,13 +110,17 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Decisión:** `/auth/logout` exige un JWT válido (protegido) y devuelve 204, pero no tiene ningún efecto sobre la validez del token — el backend no tiene forma de revocarlo. La limitación está documentada como comentario en el código (`backend/app/api/routes/auth.py`).
 
-**Mitigación real:** el cliente (`AuthService.signOut()`) llama a este endpoint best-effort y luego borra el JWT localmente — la sesión termina ahí, no porque el backend lo haya invalidado.
+**Mitigación real:** el cliente (`AuthService.signOut()`) llama a este endpoint best-effort, cierra la sesión de Google (`GoogleSignIn.signOut()`, también best-effort) y luego borra el JWT localmente — la sesión termina ahí, no porque el backend lo haya invalidado.
+
+**Actualización (2026-10-20):** el cierre de sesión de Google es necesario porque, sin él, el plugin conserva la cuenta en caché y el siguiente `signIn()` la reutiliza en silencio, sin mostrar el selector de cuentas.
 
 ---
 
 ## D-11 — Código dependiente de `FlutterSecureStorage` no se testea directamente
 
 **Contexto:** se necesitaba decidir el nivel de testing para `AuthService.signOut()`, `TokenStorage`, `ConsentStorage`.
+
+**Actualización (2026-10-20):** `AuthService` ahora recibe `GoogleSignIn` por constructor y `signOut()` sí tiene tests unitarios (`auth_service_test.dart`) con fakes de `GoogleSignIn` y del almacenamiento. La excepción sigue vigente para `TokenStorage` y `ConsentStorage`.
 
 **Decisión, con evidencia empírica:** se probó que una llamada real a `FlutterSecureStorage` sin mock, ejecutada dentro de un `testWidgets()`, **cuelga el test indefinidamente** (no lanza excepción). Por eso ninguno de estos tres componentes tiene un test unitario que ejercite su cuerpo real — se verifican indirectamente a través de los fakes que las pantallas que los consumen inyectan por constructor.
 
@@ -160,6 +166,8 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Cómo verificar el modelo correcto en el futuro** (si `gemini-flash-latest` alguna vez deja de existir): `client.models.list()` filtrando por `'generateContent' in m.supported_actions` devuelve los modelos realmente disponibles para esa API key — más confiable que cualquier nombre hardcodeado en documentación o en este archivo.
 
+**Actualización (2026-10-15): reemplazada por D-26.** El código ya no usa el alias: `_MODEL` quedó fijo en `gemini-3.5-flash-lite`. Lo de arriba se conserva como historia y el método de verificación con `client.models.list()` sigue siendo válido.
+
 ---
 
 ## D-15 — Personalización con perfil/hábitos: el LLM decide la relevancia, no se clasifica programáticamente
@@ -168,7 +176,7 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 
 **Decisión:** mismo criterio ya usado con el contexto de RAG (ver D-14 y `llm_service._SYSTEM_INSTRUCTIONS`): `chat_service.send_message` siempre arma el `user_context` (perfil + hábitos del usuario, si existen — `build_user_context`) y se lo pasa a `generate_answer`, pero la instrucción explícita al modelo es usarlo *solo si es relevante para la pregunta* y no mencionarlo si no viene al caso. No hay clasificación previa de relevancia en el backend.
 
-**Formato del contexto:** texto simple, sin humanizar los códigos de `habit_records` (`domain`/`key`/`value`, ej. `sleep.hours: 5_6`) — esa tabla de humanización (a texto legible en español) solo existe en `mobile/lib/features/habits/habit_questions.dart`, no se replicó en el backend para evitar duplicar la fuente de verdad.
+**Formato del contexto:** texto simple, sin humanizar los códigos de `habit_records` (`domain`/`key`/`value`, ej. `sleep.hours: 5_6`) — esa tabla de humanización (a texto legible en español) solo existe en `mobile/lib/features/habits/habit_questions.dart`, no se replicó en el backend para evitar duplicar la fuente de verdad. **Actualización (2026-10-15): reemplazado por D-26:** desde entonces el backend sí traduce los códigos a español (`user_context_labels.py`), aceptando la duplicación.
 
 **Verificado con una llamada real:** con un usuario real (perfil `18-24`/`sleep_better`, 9 hábitos cargados) y la pregunta "¿Qué puedo hacer para dormir mejor?", Gemini referenció correctamente el hábito `sleep.hours=5_6` en la respuesta ("tus registros indican que estás durmiendo entre 5 y 6 horas"), mientras seguía admitiendo honestamente que el contexto RAG recuperado (un documento de la OMS sobre actividad física, no de sueño) no tenía evidencia específica — mismo comportamiento de no inventar ya validado en D-14.
 
@@ -282,7 +290,7 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 - La lista de hoy parte en cero a la medianoche del propio usuario; la franja semanal permite ver días pasados en solo lectura (D-24).
 - Recordatorio local opcional por tarea (D-25).
 
-**Sigue fuera del MVP:** tareas generadas automáticamente, notificaciones inteligentes (push o decididas por el servidor), gamificación, logros y puntos, seguimiento por GPS (la barra de progreso en kilómetros es un contador manual) y cualquier diagnóstico o tratamiento. Las tareas son hábitos de comportamiento, no indicaciones médicas.
+**Sigue fuera del MVP:** tareas generadas automáticamente, notificaciones inteligentes (push o decididas por el servidor), gamificación, logros y puntos, seguimiento por GPS (la caminata se mide en minutos con un contador manual) y cualquier diagnóstico o tratamiento. Las tareas son hábitos de comportamiento, no indicaciones médicas.
 
 **Alternativas descartadas:** (a) dejarlo como mejora posterior al MVP: la persona responsable prefirió incluirlo; (b) mostrar la lista dentro de Inicio: se eligió la pestaña Actividad por fidelidad al Figma; (c) tareas libres escritas por la persona usuaria: abre texto libre y validación de contenido.
 
@@ -328,3 +336,166 @@ Registro de decisiones tomadas durante la implementación que **no** estaban exp
 - Los recordatorios se refrescan al abrir Actividad: si la persona no abre la app en más de 7 días, dejan de llegar hasta que la abra.
 - Un aviso que Android alcanzara a retrasar y que aún no se hubiera mostrado se cancelaría si la sincronización corre justo entonces.
 - No hay recordatorios en un día pasado ni se programa nada para tareas sin hora.
+
+
+---
+
+## D-26 — Modelo de chat fijado a `gemini-3.5-flash-lite` y contexto del usuario en español
+
+**Contexto:** el chat pasó del tier gratuito de Gemini a pago por uso. La app solo lee `GEMINI_API_KEY` (`backend/app/core/config.py`): que sea gratuita o de pago es un asunto de facturación del proyecto de Google (se activa en Google AI Studio), sin cambio de código. El alias `gemini-flash-latest` (D-14) puede apuntar a otro modelo, con otro precio, sin avisar. Además el contexto del usuario llegaba al modelo con códigos crudos (`sleep.hours: 5_6`), ambiguos sin la pregunta que respondían (D-15).
+
+**Decisión (2026-10-15):**
+- `llm_service._MODEL = "gemini-3.5-flash-lite"`, fijo. Reemplaza el alias de D-14.
+- `backend/app/services/user_context_labels.py` traduce a español claro el objetivo principal y cada respuesta del cuestionario de hábitos antes de enviarlas al modelo (`chat_service.build_user_context`). Un código desconocido nunca es un error: se usa el valor crudo.
+- Esto reemplaza lo que decía D-15 sobre no humanizar los códigos: las etiquetas se duplican a propósito del móvil (`habit_questions.dart`, `profile_options.dart`) a cambio de que el modelo lea texto sin ambigüedad. **Hay que mantener ambas listas sincronizadas a mano**; el módulo lo avisa en su encabezado.
+
+**Alternativas descartadas:** (a) seguir con el alias: cambios de modelo y de costo sin aviso; (b) que el móvil envíe los textos ya traducidos: el backend arma el contexto desde sus propios datos y no confía en lo que mande el cliente (D-01).
+
+**Verificado:** las pruebas del backend pasaron al hacer el cambio y el chat respondió en el celular tras reconstruir el backend. **Pendiente:** confirmar en Google AI Studio que el uso aparece bajo `gemini-3.5-flash-lite`.
+
+**Limitaciones conocidas:**
+- El chat **no envía el historial** de la conversación al modelo: cada pregunta se arma con la pregunta, los fragmentos recuperados y el contexto del usuario (`llm_service.build_prompt`). El historial solo se guarda y se muestra en la app.
+- Si el nombre del modelo dejara de existir (404), se revierte el cambio (`ee122b2`) o se elige otro con `client.models.list()` (D-14).
+
+
+---
+
+## D-27 — Pruebas en celular por Tailscale en lugar de cable USB (`adb reverse`)
+
+**Contexto:** probar en un celular físico exigía el cable USB y `adb reverse` activo cada vez, lo que estorbaba al equipo de dos personas. La presentación será en una sola tarde de noviembre de 2026 (fecha por confirmar) y podría durar 4 horas o más.
+
+**Decisión (2026-10-16):** el backend y PostgreSQL siguen corriendo en la PC con `docker compose up -d`, y los celulares los alcanzan por la red privada de Tailscale (cuenta gratuita). El APK se compila una vez con `API_BASE_URL=http://<IP de Tailscale de la PC>:8000`; el cable solo se usa, si se quiere, para instalar el APK. El procedimiento detallado se mantiene en una guía local no versionada (`GUIA_PRUEBA_HABITQ_CELULAR.txt`, sección 14); lo esencial está resumido en esta entrada.
+
+**Alternativas descartadas:**
+- *Despliegue en la nube* (Hetzner, Fly.io, Railway, Render): independiente de cualquier PC y con URL estable, pero cuesta dinero y el backend necesita **al menos 1 GB de RAM, mejor 2 GB** (medido: ~120 MB en reposo, ~900 MB con el modelo de embeddings cargado, pico ~1,7 GB; el modelo se carga en la primera pregunta del chat). Los planes gratuitos de 512 MB no alcanzan. Queda como plan si el presupuesto lo permite antes de la presentación.
+- *Cloudflare Tunnel / ngrok:* la URL estable exige comprar un dominio; con la gratuita cambia en cada ejecución y obligaría a recompilar el APK.
+
+**Limitaciones conocidas:**
+- Solo funciona en celulares con la app de Tailscale instalada y con sesión iniciada (la PC se comparte con la cuenta del compañero desde *Machines → Share*). Un tercero, como el jurado, no podría probar la app.
+- La PC debe estar encendida, sin suspenderse y con Docker corriendo durante toda la demostración, y depende del internet del lugar.
+- El APK queda atado a la IP de Tailscale de la PC; si cambia, hay que recompilarlo.
+- Hay que usar builds **debug**: el permiso `INTERNET` solo está declarado en los manifests de debug y profile, no en el principal.
+- La imagen Docker del backend debe reconstruirse (`docker compose up -d --build backend`) cuando cambia el código; una imagen vieja dejó sin rutas `/tasks` ("Not Found" en Actividad).
+- Un volumen de Docker nuevo arranca vacío: los datos de un PostgreSQL local hay que copiarlos (`pg_dump` → `psql`) o volver a ingerir los PDFs.
+
+**Plan B para la presentación:** `adb reverse` por cable (guía local, secciones 1 a 7), y enviar una pregunta de calentamiento al chat antes de empezar para que el modelo ya esté cargado.
+
+---
+
+## D-28 — Excepción al alcance y al freeze: pestaña de Estadísticas (últimos 7 días)
+
+**Contexto:** el plan deja fuera "Dashboards, Gráficos de progreso, Estadísticas avanzadas" (sección 2) y D-07 mantuvo la app sin tab de estadísticas. El cierre de funcionalidades del 11 de octubre ya se reabrió una vez con aprobación explícita (D-23). La única serie temporal real que guarda la app es `task_progress` (progreso por tarea y día); `habit_records` se edita en sitio con `PUT /habits/{id}`, así que no conserva historia y no sirve para mostrar evolución.
+
+**Decisión (2026-10-21):** se reabre el alcance, con aprobación explícita de la persona responsable del proyecto, para una quinta pestaña **Estadísticas** (Inicio, Actividad, Estadísticas, Chat, Perfil) con un periodo fijo: los últimos 7 días, terminando en el día local de la persona.
+- **Cumplimiento por día:** tareas completadas (`progress >= target`) sobre tareas activas ese día, en barras. Las reglas de qué tarea cuenta ese día son las de `GET /tasks?day=` (una tarea archivada solo cuenta si ese día tiene progreso mayor que 0).
+- **Promedio de contadores y mejor día:** promedio diario de cada tarea con contador y el día de la ventana con mayor cumplimiento (empate: el más reciente; sin tareas: ninguno).
+- **Resumen de hábitos:** lista de solo lectura por dominio con las respuestas actuales del cuestionario, sin evolución ni valoración (sin semáforo). Reutiliza `GET /habits` y las etiquetas de `habit_questions.dart`; no hay endpoint nuevo.
+- **Endpoint nuevo `GET /tasks/stats?day=AAAA-MM-DD`:** el servidor calcula los 7 días con una sola consulta por rango y aplica la misma tolerancia de fecha local de D-24 (±1 día respecto de la fecha UTC). No hay tablas ni migraciones nuevas.
+- **Gráficos con `fl_chart`** (primera dependencia de gráficos de la app).
+- **Sin datos:** mensaje vacío con botón hacia Actividad; el resumen de hábitos se muestra igual si ya respondió el cuestionario.
+
+**Sigue fuera del MVP:** rachas, puntos, logros, semáforos o juicios de salud, evolución de hábitos, rangos navegables (semanas anteriores, mes) y estadísticas del chat.
+
+**Alternativas descartadas:** (a) siete llamadas a `GET /tasks?day=` desde la app: siete peticiones por apertura y la lógica de cálculo repetida en el celular; (b) `CustomPaint` propio o solo barras de progreso con widgets: menos dependencias pero más código de dibujo a mantener y probar; (c) selector semana/mes o rango navegable: más pantalla y más pruebas para un MVP; (d) reemplazar Perfil en la barra: cambia un flujo existente, y Material 3 admite hasta cinco destinos.
+
+**Reversión:** no hay migraciones, así que la base de datos no cambia. La etiqueta `v-pre-stats` marca el estado anterior de `develop`. El trabajo se entrega en dos PRs (backend y documentación; después app móvil) para poder revertir la interfaz sin retirar el endpoint.
+
+**Límite conocido:** el cálculo es sobre las tareas que la persona activó, no sobre un objetivo de salud. Un 100 % significa que cumplió lo que eligió, no que sus hábitos sean saludables.
+
+---
+
+## D-29 — Identidad de la app en Android: nombre «HabitQ» y logo HQ
+
+**Contexto:** el proyecto Flutter se creó con el nombre del paquete (`mobile`), así que el teléfono mostraba «mobile» bajo el ícono genérico de Flutter, y las notificaciones de los recordatorios (D-25) usaban ese mismo ícono. Los commits `75d8eb3` y `c06209a` (2026-10-16) lo corrigieron sin dejar una decisión escrita.
+
+**Decisión:**
+- **Nombre visible:** `android:label="HabitQ"` en `AndroidManifest.xml`. El nombre del paquete Dart (`mobile`) no cambia: los `import` del proyecto dependen de él y la etiqueta del manifiesto es lo único que ve la persona.
+- **Ícono del lanzador:** ícono adaptativo (`mipmap-anydpi-v26/ic_launcher.xml`) con el logo HQ como primer plano sobre fondo blanco (`ic_launcher_background`), y los PNG de cada densidad (`mdpi` a `xxxhdpi`) para versiones anteriores a Android 8.
+- **Ícono de las notificaciones:** una silueta blanca propia (`drawable-*/ic_stat_hq.png`) que se pasa a `AndroidInitializationSettings` en `LocalNotificationGateway`. Android solo usa la transparencia (alfa) de los íconos de la barra de estado, así que el ícono de color del lanzador se vería como un cuadrado sólido.
+
+**Alcance:** solo Android. No se tocaron los recursos de iOS ni los de web/escritorio, porque el proyecto se desarrolla y prueba en Android (D-27).
+
+**Pendiente:** los PNG de ícono se generaron a partir del logo HQ; el archivo fuente del logo no está en el repositorio (`Diseño/` solo contiene los bocetos de pantallas). Si hay que regenerarlos, hace falta el original.
+
+---
+
+## D-30 — Pulido visual y de movimiento de la app móvil (sin cambiar paleta ni estructura)
+
+**Contexto:** la retroalimentación del profesor señaló que la app se veía simple y sin «vida». La app no tenía animaciones propias, usaba los íconos básicos de Material, fondos blancos planos y la transición de página por defecto.
+
+**Decisión (2026-10-28):** se modernizó la capa visual **sin tocar la paleta (`AppColors`), la tipografía Lexend ni la estructura de pantallas de los mockups de Figma**. El único color nuevo es `AppColors.sun` (`0xFFF2C94C`, el amarillo de las ilustraciones de Figma), solo para acentos de celebración.
+- **Íconos:** `Icons.*` pasa a Material Symbols Rounded (`material_symbols_icons`); la pestaña activa usa el ícono relleno.
+- **Formas de fondo:** `BackgroundShapes` (manchas orgánicas y puntos, estáticas) detrás de todas las pestañas y del login.
+- **Celebración:** al pasar una tarea de pendiente a completada **hoy** se dibujan fuegos artificiales (`CelebrationOverlay`, `CustomPainter` propio, sin paquete) con vibración suave; si queda completo todo el día, un banner «¡Día completo!». No se dispara al cargar la pantalla, al desmarcar, con errores de guardado ni en días pasados.
+- **Movimiento:** `AppMotion` centraliza duraciones y curvas; entradas escalonadas (`FadeSlideIn`), tarjetas que se encogen al presionarlas, chips de día y barras de progreso animados, y transición de página de fundido con ligero ascenso en Android.
+- **Fluidez:** `AppScrollBehavior` (rebote en todas las plataformas), `RepaintBoundary` en tarjetas y fondo, logo decodificado a su tamaño real y petición explícita de la mayor tasa de refresco de la pantalla desde `MainActivity.kt`.
+- **Accesibilidad:** con «Quitar animaciones» del sistema se omiten las partículas y las transiciones; el banner, que informa, se mantiene.
+
+**Reglas que se mantienen:** todas las animaciones son **finitas** (nada con `repeat()`), porque las pruebas usan `pumpAndSettle` y un bucle infinito las colgaría; la pantalla de consentimiento conserva su tema heredado.
+
+**Alternativas descartadas:** (a) paquete `confetti` o Lottie: una dependencia más para un efecto de ~1,6 s que se dibuja con un `CustomPainter` en la paleta propia; (b) `flutter_displaymode`: paquete sin mantenimiento reciente para lo que resuelven ~15 líneas nativas; (c) `IndexedStack` para las pestañas: cambia la arquitectura de navegación y obligaría a reescribir las pruebas del shell; (d) animar las burbujas del chat: choca con el cálculo de desplazamiento hacia el inicio de la respuesta, así que quedó fuera.
+
+**Pendiente:** confirmar en un teléfono de 120 Hz que el selector de modo de pantalla respeta la petición (algunos fabricantes la ignoran con el ahorro de batería activo).
+
+---
+
+## D-31 — Paleta con celeste, hábitos por pasos y estados de la interfaz
+
+**Contexto:** tras D-30 la responsable del proyecto pidió que la app destaque en frontend y en experiencia de usuario, con la skill UI UX Pro Max como consulta (instalada solo en local, fuera de git), y fijó tres cambios: que la app se componga sobre todo de **celeste, blanco y verde**; que **Inicio muestre las tareas de Actividad**; y que las preguntas de hábitos se hagan **una por una**, con una animación según la categoría de la respuesta.
+
+**Decisión (2026-10-28):**
+- **Paleta:** se amplía, no se reemplaza. Tokens nuevos `sky` (`8FD3F4`), `skyLight` (`E6F6FD`) y `skyDeep` (`2E9BD6`, solo íconos y detalles). Fondo con degradado blanco→`skyLight` en todas las pestañas y el login, cabecera y barra de navegación en celeste, saludo de Inicio en celeste. El verde sigue siendo el de las acciones y el texto sigue en azul marino, porque el verde sobre celeste no alcanza un contraste legible (los pares nuevos tienen prueba de contraste WCAG).
+- **Inicio:** tarjeta «Tus tareas de hoy» con anillo de progreso y hasta tres tareas pendientes; es de solo lectura y al tocarla abre la pestaña Actividad, donde se completan.
+- **Hábitos por pasos** (`HabitWizard`, compartido por el onboarding y Mis hábitos): una pregunta por pantalla con barra de progreso «Pregunta X de 9», respuestas como tarjetas de 56 dp, avance automático tras elegir, Atrás/Siguiente y un resumen final. Al elegir se lanza una animación de la **categoría** (Sueño: «z/Z»; Alimentación: manzana y hoja; Actividad física: rayo y corredor; Hidratación: gotas; Pantallas: móvil y ojo; Estrés: spa y hoja), nunca de la respuesta, para no emitir juicios. En Mis hábitos cada cambio se guarda al elegir y solo se anima y avanza si el guardado fue aceptado; una pregunta sin registro muestra «Sin responder» y se puede saltar (no se crean registros ahí, regla vigente). El onboarding sigue guardando todo al final.
+- **Errores y estados:** `ApiConnectionException` (subtipo de `ApiException`, mismo mensaje) distingue «no hay conexión» de los errores del servidor. `ErrorNotice` (con «Reintentar» y anunciado a lectores de pantalla) reemplaza el texto rojo suelto en Inicio, Actividad, Estadísticas, historial, Mis hábitos y chat (reintenta la misma pregunta sin duplicarla); Actividad reintenta sola al volver a la app tras un fallo. Esqueletos estáticos (sin brillo en bucle) reemplazan las ruedas de carga y `EmptyState` dibuja los estados vacíos con la paleta.
+- **Estadísticas:** conteo animado de «Hoy X de Y», una frase semanal neutra («Completaste el 43 % de las tareas que elegiste…», sin juicio de salud, D-28) y un resumen hablado del gráfico para lectores de pantalla.
+- **Navegación y primera impresión:** el ícono de la pestaña recién elegida rebota; indicador «Paso 1 de 2» en el perfil del onboarding; splash nativo con el logo (`splash_logo.png`, Android 12+ con `values-v31`). El logo original trae un tablero de ajedrez «transparente» incrustado, así que se generó `logo_hq_clean.png` con fondo realmente transparente (el original no se tocó).
+- **Accesibilidad:** botones de icono de 48 dp, opciones con estado «seleccionado» y movimiento reducido respetado en todo.
+
+**Consultado en la skill y aplicado:** progreso visible en flujos de varios pasos; errores anunciados; vibración solo en confirmaciones (por eso la barra de navegación **no** vibra); estados vacíos con una acción.
+
+**Alternativas descartadas:** (a) `Hero` entre la tarjeta de Inicio y su pantalla: choca con la transición de página y aporta poco; (b) brillo de carga en bucle: un `repeat()` impide que las pruebas con `pumpAndSettle` terminen; (c) oscurecer el verde para el texto pequeño: toca la paleta de Figma y la responsable no lo pidió (el verde `0CBC8B` sobre blanco da ~2,5:1; queda como mejora pendiente); (d) animar según la respuesta (p. ej. «mal sueño»): sería un juicio de salud.
+
+**Pendiente:** ver en el teléfono el splash y el nuevo logo en la cabecera; las respuestas de un cuestionario ya guardado no cambian.
+
+---
+
+## D-32 — Cuestionario de hábitos medible y datos físicos (género, altura, peso) en el perfil
+
+**Contexto:** varias preguntas del cuestionario mezclaban frecuencia y cantidad, dejaban huecos entre rangos (en agua, «2–3 L» no estaba cubierto y 1 y 2 L se solapaban) o eran subjetivas («Bajo / Moderado / Adecuado»). Además, el perfil no tenía datos físicos, relevantes para hidratación e IMC.
+
+**Decisión (2026-11-01):**
+- **Cuestionario:** las 9 preguntas pasan a tener respuestas medibles y excluyentes. Sueño y pantallas antes de dormir no cambian de opciones; la 1 solo cambia el enunciado. Frutas/verduras («veces al día»), comida rápida («a la semana»), ejercicio («días a la semana»), tiempo sentado (pasa de Sí/No a rangos de horas, conserva `key: sedentary_hours`), agua (litros, con la nota «1 vaso ≈ 250 ml», campo nuevo `hint` en `HabitQuestion`), tiempo en dispositivos (portátiles, celular, tablet y televisor) y estrés («en el último mes, días a la semana») se reformularon. Los códigos nuevos (`none`, `weekly_1_3`, `less_4h`, `less_1l`, `more_6h`, etc.) viven en `habit_questions.dart` y se espejan a mano en `user_context_labels.py` (D-26), incluida la descripción de cada pregunta.
+- **Perfil:** `profiles` gana `gender` (`female`, `male`, `other`, `prefer_not_to_say`), `height_cm` (entero, 100–250) y `weight_kg` (decimal, 20–300), todos nullable (migración `0010`). Se guardan **valores exactos**, no rangos. `PUT /profile` los valida con Pydantic (422 fuera de rango) y los reemplaza junto con el resto del perfil; los perfiles existentes quedan con `null`.
+- **Chat:** `build_user_context` agrega género, altura, peso y el IMC (peso / altura², un decimal) solo si hay altura y peso. Sin esos datos la línea del perfil queda como antes.
+- **Onboarding:** el perfil pasa a ser un flujo pregunta por pregunta (género, rango de edad, altura, peso, objetivo principal) con el mismo movimiento que el cuestionario de hábitos. Para no duplicar animaciones se extrajo a `core/widgets/step_flow.dart` el contenedor animado (`StepSwitcher`), la tarjeta de opción (`OptionTile`, antes `HabitOptionTile`), la barra de progreso y la fila Atrás/Siguiente; `HabitWizard` y el onboarding los comparten. Las opciones avanzan solas tras una breve pausa; altura y peso usan un campo numérico con validación y «Siguiente». Todo se guarda al final con un solo `PUT /profile`. La pantalla «Mi perfil» sigue siendo de edición rápida y solo suma los campos nuevos (chips de género y un bloque «Altura y peso» con «Guardar medidas»).
+- **Consentimiento:** el texto ahora dice que se guardan «rango de edad, género, altura, peso y objetivo principal». Son datos de salud y se cubren con el consentimiento existente.
+- **Datos existentes:** la migración borra solo los `habit_records` cuyo valor ya no es una opción vigente de las preguntas reformuladas (por ejemplo `rarely` en frutas/verduras o `yes`/`no` en tiempo sentado), para que se respondan de nuevo. Las respuestas con un código que sigue vigente (`less_2h`, `2_4h` en dispositivos; todas las de sueño y ejercicio) se conservan. El `downgrade` revierte solo el esquema; los registros borrados no se recuperan.
+
+**Impacto en el modelo:** bajo. No hay modelo entrenado: la app guarda `domain/key/value` como texto libre, el backend lo traduce a español y el LLM lo lee; un código desconocido cae al valor crudo y no rompe nada.
+
+**Alternativas descartadas:** (a) guardar rangos de altura y peso: pierden precisión para el IMC; (b) duplicar las animaciones del cuestionario en el onboarding: dos copias que se desincronizan; (c) convertir «Mi perfil» en wizard: la edición rápida es más útil allí; (d) borrar todos los registros de las preguntas 3–9: se perderían respuestas todavía válidas.
+
+**Pendiente:** el IMC es orientativo (no distingue masa muscular, edad ni sexo) y el modelo no debe usarlo para diagnosticar; las personas que ya habían respondido verán «Sin responder» en las preguntas borradas hasta que las contesten en «Mis hábitos». Hay que ejecutar `alembic upgrade head` en cada base de datos.
+
+---
+
+## D-33 — Ícono propio por pregunta del cuestionario de hábitos
+
+**Contexto:** el cuestionario solo mostraba el ícono de la categoría (pequeño, en la cabecera), así que las dos preguntas de sueño compartían la luna y ninguna ilustraba lo que se preguntaba.
+
+**Decisión (2026-11-02):** `HabitQuestion` gana el campo `icon` y cada una de las 9 preguntas define el suyo (cama, celular, hoja, comida rápida, pesa, silla, vaso, dispositivos y cara de estrés). `HabitWizard` lo dibuja centrado sobre el enunciado, en un círculo de 144 px con el mismo estilo del ícono de categoría, que no cambia. Es decorativo (`ExcludeSemantics`). El ícono «flota» con 20 px iguales entre la barra de progreso y el enunciado, y el contenido queda pegado arriba (`StepSwitcher` gana el parámetro `alignment`, centrado por defecto; solo el cuestionario usa `topCenter`) en lugar de centrado verticalmente, que dejaba el ícono lejos de la barra y pegado al texto. El contenido ya era desplazable, así que en pantallas bajas se llega a todas las opciones. El backend no cambia.
+
+**Alternativas descartadas:** (a) reemplazar el ícono de categoría: se pidió conservarlo; (b) ilustraciones propias: sin assets ni diseño aprobado, el paquete de símbolos ya está en el proyecto.
+
+**Verificado (2026-11-02):** la responsable revisó en el teléfono los íconos por pregunta y su posición simétrica, y confirmó que quedaron como se pedía. Cambiar un ícono que no resulte claro es una línea en `habit_questions.dart`.
+
+---
+
+## D-34 — El cuestionario de hábitos deja de mostrar el ícono de la categoría
+
+**Contexto:** con el ícono propio de cada pregunta (D-33), el ícono pequeño de la categoría en la cabecera (la luna de Sueño, etc.) repetía información y competía con él. D-33 había dicho que se conservaba.
+
+**Decisión (2026-11-03):** la cabecera del `HabitWizard` muestra solo el nombre de la categoría y «Pregunta N de 9». Se elimina `DomainVisual.badge`, que ya no tenía otro uso; `DomainVisual` sigue definiendo la animación por categoría al responder (`DomainBurst`), que no cambia. Reemplaza lo que decía D-33 sobre conservar el ícono de categoría.
+
+**Alternativas descartadas:** dejar el campo `badge` sin usar «por si acaso»: es código muerto, y recuperarlo desde el historial es trivial.

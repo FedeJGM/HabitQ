@@ -42,3 +42,26 @@ class TaskDayOut(TaskOut):
     completed: bool
     # True for a removed task that is only listed because it has history that day.
     archived: bool = False
+
+
+class StatsDayOut(BaseModel):
+    day: date
+    # Tasks that counted that day and how many reached their target.
+    active: int
+    completed: int
+
+
+class CounterStatOut(BaseModel):
+    task_key: str
+    label: str
+    unit: str
+    target: int
+    # Days of the window the task counted, and the mean progress over them.
+    days: int
+    average: float
+
+
+class TaskStatsOut(BaseModel):
+    days: list[StatsDayOut]
+    counters: list[CounterStatOut]
+    best_day: date | None

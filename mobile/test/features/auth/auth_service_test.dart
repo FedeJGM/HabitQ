@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mobile/core/networking/api_client.dart';
 import 'package:mobile/core/networking/token_storage.dart';
 import 'package:mobile/features/auth/auth_service.dart';
@@ -62,6 +63,23 @@ class _FakeTokenStorage implements TokenStorage {
   }
 }
 
+class _FakeGoogleSignIn implements GoogleSignIn {
+  _FakeGoogleSignIn({this.signOutError});
+
+  final Object? signOutError;
+  int signOutCalls = 0;
+
+  @override
+  Future<GoogleSignInAccount?> signOut() async {
+    signOutCalls++;
+    if (signOutError != null) throw signOutError!;
+    return null;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 String _makeToken(DateTime expiry) {
   String segment(Object? value) =>
       base64Url.encode(utf8.encode(jsonEncode(value))).replaceAll('=', '');
@@ -93,6 +111,37 @@ void main() {
       final service = AuthService(apiClient: fakeClient);
 
       await expectLater(service.fetchCurrentUser(), throwsA(isA<ApiException>()));
+    });
+  });
+
+  group('AuthService.signOut', () {
+    test('clears the Google session so the account picker shows again', () async {
+      final google = _FakeGoogleSignIn();
+      final tokenStorage = _FakeTokenStorage()..stored = 'jwt';
+      final service = AuthService(
+        apiClient: _FakeApiClient(response: const {}),
+        tokenStorage: tokenStorage,
+        googleSignIn: google,
+      );
+
+      await service.signOut();
+
+      expect(google.signOutCalls, 1);
+      expect(tokenStorage.stored, isNull);
+    });
+
+    test('still discards the token when Google sign-out fails', () async {
+      final google = _FakeGoogleSignIn(signOutError: Exception('play services'));
+      final tokenStorage = _FakeTokenStorage()..stored = 'jwt';
+      final service = AuthService(
+        apiClient: _FakeApiClient(response: const {}),
+        tokenStorage: tokenStorage,
+        googleSignIn: google,
+      );
+
+      await service.signOut();
+
+      expect(tokenStorage.stored, isNull);
     });
   });
 

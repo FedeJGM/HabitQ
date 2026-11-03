@@ -103,6 +103,7 @@ def _add_progress(db: Session, task: DailyTask, day: date, progress: int) -> Non
     [
         ("get", "/tasks/catalog"),
         ("get", "/tasks?day=2026-10-15"),
+        ("get", "/tasks/stats?day=2026-10-15"),
         ("post", "/tasks"),
         ("put", f"/tasks/{uuid.uuid4()}"),
         ("delete", f"/tasks/{uuid.uuid4()}"),
@@ -478,3 +479,158 @@ def test_progress_returns_404_for_an_archived_task(db, signed_in) -> None:
     response = client.put(f"/tasks/{task.id}/progress", json={"day": "2026-10-15", "progress": 1})
 
     assert response.status_code == 404
+
+
+# --- stats ----------------------------------------------------------------
+
+
+def _stats(day: str = "2026-10-15"):
+    return client.get(f"/tasks/stats?day={day}")
+
+
+def test_stats_requires_the_day_parameter(signed_in) -> None:
+    assert client.get("/tasks/stats").status_code == 422
+
+
+def test_stats_rejects_a_malformed_day(signed_in) -> None:
+    assert _stats("not-a-date").status_code == 422
+
+
+def test_stats_day_is_limited_to_one_day_around_the_server_date(signed_in) -> None:
+    assert _stats("2026-10-16").status_code == 200
+    assert _stats("2026-10-14").status_code == 200
+    assert _stats("2026-10-17").status_code == 422
+    assert _stats("2026-10-13").status_code == 422
+
+
+def test_stats_without_tasks_returns_seven_empty_days(signed_in) -> None:
+    body = _stats().json()
+
+    assert [d["day"] for d in body["days"]] == [
+        "2026-10-09", "2026-10-10", "2026-10-11", "2026-10-12",
+        "2026-10-13", "2026-10-14", "2026-10-15",
+    ]
+    assert all(d["active"] == 0 and d["completed"] == 0 for d in body["days"])
+    assert body["counters"] == []
+    assert body["best_day"] is None
+
+
+def test_stats_window_ends_on_the_requested_local_day(signed_in) -> None:
+    body = _stats("2026-10-16").json()
+
+    assert body["days"][0]["day"] == "2026-10-10"
+    assert body["days"][-1]["day"] == "2026-10-16"
+
+
+def test_stats_counts_active_and_completed_tasks_per_day(db, signed_in) -> None:
+    water = _add_task(db, signed_in, "hydrate_water", 8)
+    fruit = _add_task(db, signed_in, "eat_fruit_veg", 5)
+    _add_progress(db, water, date(2026, 10, 14), 8)
+    _add_progress(db, fruit, date(2026, 10, 14), 5)
+    _add_progress(db, water, date(2026, 10, 15), 8)
+    _add_progress(db, fruit, date(2026, 10, 15), 2)
+
+    days = {d["day"]: d for d in _stats().json()["days"]}
+
+    assert days["2026-10-14"] == {"day": "2026-10-14", "active": 2, "completed": 2}
+    assert days["2026-10-15"] == {"day": "2026-10-15", "active": 2, "completed": 1}
+    assert days["2026-10-13"] == {"day": "2026-10-13", "active": 2, "completed": 0}
+
+
+def test_stats_does_not_count_a_partial_counter_as_completed(db, signed_in) -> None:
+    water = _add_task(db, signed_in, "hydrate_water", 8)
+    _add_progress(db, water, date(2026, 10, 15), 4)
+
+    today = _stats().json()["days"][-1]
+
+    assert today["active"] == 1 and today["completed"] == 0
+
+
+def test_stats_ignores_days_before_a_task_was_created(db, signed_in) -> None:
+    _add_task(db, signed_in, "hydrate_water", 8, created=datetime(2026, 10, 13, tzinfo=timezone.utc))
+
+    days = {d["day"]: d["active"] for d in _stats().json()["days"]}
+
+    assert days["2026-10-11"] == 0
+    assert days["2026-10-12"] == 1  # one day of slack for the user's local date
+    assert days["2026-10-15"] == 1
+
+
+def test_stats_counts_an_archived_task_only_on_days_with_progress(db, signed_in) -> None:
+    water = _add_task(db, signed_in, "hydrate_water", 8, archived=True)
+    _add_progress(db, water, date(2026, 10, 12), 8)
+    _add_progress(db, water, date(2026, 10, 13), 0)
+
+    days = {d["day"]: d for d in _stats().json()["days"]}
+
+    assert days["2026-10-12"]["active"] == 1 and days["2026-10-12"]["completed"] == 1
+    assert days["2026-10-13"]["active"] == 0
+    assert days["2026-10-15"]["active"] == 0
+
+
+def test_stats_ignores_other_users_tasks(db, signed_in) -> None:
+    other = _make_user(db)
+    theirs = _add_task(db, other, "hydrate_water", 8)
+    _add_progress(db, theirs, date(2026, 10, 15), 8)
+
+    body = _stats().json()
+
+    assert all(d["active"] == 0 for d in body["days"])
+    assert body["counters"] == []
+
+
+def test_stats_ignores_progress_outside_the_window(db, signed_in) -> None:
+    water = _add_task(db, signed_in, "hydrate_water", 8)
+    _add_progress(db, water, date(2026, 10, 8), 8)
+
+    days = _stats().json()["days"]
+
+    assert all(d["completed"] == 0 for d in days)
+
+
+def test_stats_best_day_is_the_one_with_the_highest_completion(db, signed_in) -> None:
+    water = _add_task(db, signed_in, "hydrate_water", 8)
+    fruit = _add_task(db, signed_in, "eat_fruit_veg", 5)
+    _add_progress(db, water, date(2026, 10, 11), 8)
+    _add_progress(db, fruit, date(2026, 10, 11), 5)
+    _add_progress(db, water, date(2026, 10, 13), 8)
+
+    assert _stats().json()["best_day"] == "2026-10-11"
+
+
+def test_stats_best_day_prefers_the_most_recent_on_a_tie(db, signed_in) -> None:
+    water = _add_task(db, signed_in, "hydrate_water", 8)
+    _add_progress(db, water, date(2026, 10, 11), 8)
+    _add_progress(db, water, date(2026, 10, 14), 8)
+
+    assert _stats().json()["best_day"] == "2026-10-14"
+
+
+def test_stats_has_no_best_day_when_nothing_was_completed(db, signed_in) -> None:
+    _add_task(db, signed_in, "hydrate_water", 8)
+
+    assert _stats().json()["best_day"] is None
+
+
+def test_stats_counter_average_covers_the_days_the_task_was_active(db, signed_in) -> None:
+    water = _add_task(db, signed_in, "hydrate_water", 8, created=datetime(2026, 10, 13, tzinfo=timezone.utc))
+    _add_progress(db, water, date(2026, 10, 14), 6)
+    _add_progress(db, water, date(2026, 10, 15), 4)
+
+    [counter] = _stats().json()["counters"]
+
+    # Active 12 (slack), 13, 14, 15 -> (0 + 0 + 6 + 4) / 4
+    assert counter == {
+        "task_key": "hydrate_water",
+        "label": "Tomar agua",
+        "unit": "vasos",
+        "target": 8,
+        "days": 4,
+        "average": 2.5,
+    }
+
+
+def test_stats_counters_skip_checkbox_tasks(db, signed_in) -> None:
+    _add_task(db, signed_in, "sleep_screens_off", 1)
+
+    assert _stats().json()["counters"] == []

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_routes.dart';
+import 'core/theme/app_scroll_behavior.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth_service.dart';
 
@@ -53,6 +54,7 @@ class _HabitQAppState extends State<HabitQApp> with WidgetsBindingObserver {
       title: 'HabitQ',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      scrollBehavior: const AppScrollBehavior(),
       initialRoute: AppRoutes.login,
       routes: AppRoutes.table,
     );

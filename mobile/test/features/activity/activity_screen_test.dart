@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/app_routes.dart';
 import 'package:mobile/core/networking/api_client.dart';
+import 'package:mobile/core/widgets/empty_state.dart';
+import 'package:mobile/core/widgets/error_notice.dart';
+import 'package:mobile/core/widgets/skeleton.dart';
 import 'package:mobile/features/activity/activity_screen.dart';
 import 'package:mobile/features/activity/reminder_service.dart';
 import 'package:mobile/features/activity/tasks_service.dart';
 import 'package:mobile/features/auth/auth_service.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'fake_notification_gateway.dart';
 
@@ -281,6 +285,231 @@ void main() {
 
       expect(find.text('2/8 vasos'), findsOneWidget);
       expect(find.text('No se pudo guardar'), findsOneWidget);
+    });
+  });
+
+  testWidgets('the reminder buttons meet the 48 dp touch target', (tester) async {
+    final service = _FakeTasksService(byDay: {
+      dayKey: [_task('t1', 'eat_breakfast', 'Desayunar', reminder: '08:00')],
+    });
+    await pumpScreen(tester, service);
+
+    for (final tooltip in ['Recordatorio', 'Quitar recordatorio']) {
+      final size = tester.getSize(inCard('t1', find.byTooltip(tooltip)));
+      expect(size.width, greaterThanOrEqualTo(48), reason: tooltip);
+      expect(size.height, greaterThanOrEqualTo(48), reason: tooltip);
+    }
+  });
+
+  group('loading, empty and error states', () {
+    Future<void> pumpWithoutSettling(WidgetTester tester, _FakeTasksService service) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(
+          routes: {AppRoutes.login: (_) => const Scaffold(body: Text('Login'))},
+          home: ActivityScreen(
+            tasksService: service,
+            authService: _FakeAuthService(),
+            reminderService: ReminderService(gateway: gateway, now: () => now),
+            now: () => now,
+          ),
+        ),
+      );
+    }
+
+    testWidgets('shows skeleton cards, not a spinner, while the day loads', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar')],
+      });
+      await pumpWithoutSettling(tester, service);
+
+      expect(find.byType(SkeletonCard), findsWidgets);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      await tester.pumpAndSettle();
+      expect(find.byType(SkeletonCard), findsNothing);
+      expect(find.text('Desayunar'), findsOneWidget);
+    });
+
+    testWidgets('an empty today invites the user to pick tasks with an action', (tester) async {
+      await pumpScreen(tester, _FakeTasksService(catalog: const []));
+
+      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.text('Aún no tienes tareas'), findsOneWidget);
+      expect(find.textContaining('lápiz'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Elegir tareas'), findsOneWidget);
+    });
+
+    testWidgets('a past day without tasks says so', (tester) async {
+      await pumpScreen(tester, _FakeTasksService(byDay: {dayKey: [], '2026-10-14': []}));
+
+      await tester.tap(find.byKey(const ValueKey('day-2026-10-14')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.text('No hay tareas registradas este día.'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Elegir tareas'), findsNothing);
+    });
+
+    testWidgets('a failure shows an error notice that retries and then shows the tasks', (tester) async {
+      final service = _FakeTasksService(
+        byDay: {dayKey: [_task('t1', 'eat_breakfast', 'Desayunar')]},
+        fetchError: ApiException('Algo salió mal'),
+      );
+      await pumpScreen(tester, service);
+
+      expect(find.byType(ErrorNotice), findsOneWidget);
+      expect(find.text('Algo salió mal'), findsOneWidget);
+      expect(find.textContaining('Revisa tu conexión'), findsNothing);
+
+      service.fetchError = null;
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ErrorNotice), findsNothing);
+      expect(find.text('Desayunar'), findsOneWidget);
+      expect(service.fetchedDays, [dayKey, dayKey]);
+    });
+
+    testWidgets('a connection failure suggests checking the network', (tester) async {
+      await pumpScreen(tester, _FakeTasksService(fetchError: ApiConnectionException()));
+
+      expect(find.textContaining('Revisa tu conexión'), findsOneWidget);
+    });
+
+    testWidgets('coming back to the app after a failure retries by itself', (tester) async {
+      final service = _FakeTasksService(
+        byDay: {dayKey: [_task('t1', 'eat_breakfast', 'Desayunar')]},
+        fetchError: ApiConnectionException(),
+      );
+      await pumpScreen(tester, service);
+      expect(find.byType(ErrorNotice), findsOneWidget);
+
+      service.fetchError = null;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ErrorNotice), findsNothing);
+      expect(find.text('Desayunar'), findsOneWidget);
+    });
+
+    testWidgets('resuming without a failure does not reload the day', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar')],
+      });
+      await pumpScreen(tester, service);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(service.fetchedDays, [dayKey]);
+    });
+  });
+
+  group('celebration', () {
+    final fireworks = find.byKey(const ValueKey('firework-particles'));
+
+    Future<void> tapAndWatch(WidgetTester tester, Finder target) async {
+      await tester.tap(target);
+      await tester.pump(); // the fake service answers
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('completing a task fires fireworks that clear on their own', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar'), _task('t2', 'move_stairs', 'Escaleras')],
+      });
+      await pumpScreen(tester, service);
+      expect(fireworks, findsNothing);
+
+      await tapAndWatch(tester, inCard('t1', find.byType(Checkbox)));
+
+      expect(fireworks, findsOneWidget);
+      expect(find.text('¡Día completo!'), findsNothing);
+
+      await tester.pumpAndSettle();
+      expect(fireworks, findsNothing);
+    });
+
+    testWidgets('does not celebrate tasks that load already completed', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar', progress: 1)],
+      });
+
+      await pumpScreen(tester, service);
+
+      expect(fireworks, findsNothing);
+      expect(find.text('¡Día completo!'), findsNothing);
+    });
+
+    testWidgets('does not celebrate when a task is unticked', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [
+          _task('t1', 'eat_breakfast', 'Desayunar', progress: 1),
+          _task('t2', 'move_stairs', 'Escaleras'),
+        ],
+      });
+      await pumpScreen(tester, service);
+
+      await tapAndWatch(tester, inCard('t1', find.byType(Checkbox)));
+
+      expect(service.progressCalls, ['t1:$dayKey:0']);
+      expect(fireworks, findsNothing);
+    });
+
+    testWidgets('a counter celebrates only when it reaches its target', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [
+          _task('t1', 'stress_breathing', 'Respiración', target: 3, unit: 'veces', progress: 1),
+          _task('t2', 'move_stairs', 'Escaleras'),
+        ],
+      });
+      await pumpScreen(tester, service);
+
+      await tapAndWatch(tester, inCard('t1', find.byTooltip('Sumar')));
+      expect(find.text('2/3 veces'), findsOneWidget);
+      expect(fireworks, findsNothing);
+      await tester.pumpAndSettle();
+
+      await tapAndWatch(tester, inCard('t1', find.byTooltip('Sumar')));
+      expect(find.text('3/3 veces'), findsOneWidget);
+      expect(fireworks, findsOneWidget);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('does not celebrate when saving fails', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [_task('t1', 'eat_breakfast', 'Desayunar')],
+      })
+        ..progressError = ApiException('No se pudo guardar');
+      await pumpScreen(tester, service);
+
+      await tapAndWatch(tester, inCard('t1', find.byType(Checkbox)));
+
+      expect(fireworks, findsNothing);
+      expect(find.text('¡Día completo!'), findsNothing);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('finishing the last pending task of the day also shows the banner', (tester) async {
+      final service = _FakeTasksService(byDay: {
+        dayKey: [
+          _task('t1', 'eat_breakfast', 'Desayunar', progress: 1),
+          _task('t2', 'move_stairs', 'Escaleras'),
+        ],
+      });
+      await pumpScreen(tester, service);
+
+      await tapAndWatch(tester, inCard('t2', find.byType(Checkbox)));
+
+      expect(fireworks, findsOneWidget);
+      expect(find.text('¡Día completo!'), findsOneWidget);
+
+      await tester.pumpAndSettle();
+      expect(find.text('¡Día completo!'), findsNothing);
     });
   });
 
@@ -702,7 +931,7 @@ void main() {
       await pumpScreen(tester, service);
       gateway.cancelAllCalls = 0;
 
-      await tester.tap(find.byIcon(Icons.logout));
+      await tester.tap(find.byIcon(Symbols.logout_rounded));
       await tester.pumpAndSettle();
 
       expect(gateway.cancelAllCalls, 1);

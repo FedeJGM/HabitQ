@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app_routes.dart';
 import '../../core/networking/api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/error_notice.dart';
 import '../../core/widgets/habitq_bottom_nav.dart';
 import '../../core/widgets/habitq_shell.dart';
 import 'chat_service.dart';
@@ -45,11 +48,17 @@ class _ChatScreenState extends State<ChatScreen> {
   late final UrlOpener _urlOpener;
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  final _replyKey = GlobalKey();
+  int? _replyIndex;
   final List<_DisplayMessage> _messages = [];
   String? _conversationId;
   bool _isSending = false;
   bool _isLoadingHistory = false;
   String? _errorMessage;
+  bool _errorIsConnection = false;
+
+  /// What "Reintentar" does: the failed send or the failed history load.
+  VoidCallback? _retry;
   bool _initializedFromArguments = false;
 
   @override
@@ -75,7 +84,10 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _loadHistory(String conversationId) async {
-    setState(() => _isLoadingHistory = true);
+    setState(() {
+      _isLoadingHistory = true;
+      _errorMessage = null;
+    });
     try {
       final messages = await _chatService.fetchMessages(conversationId);
       if (!mounted) return;
@@ -92,6 +104,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() {
         _errorMessage = e.message;
+        _errorIsConnection = e is ApiConnectionException;
+        _retry = () => _loadHistory(conversationId);
         _isLoadingHistory = false;
       });
     }
@@ -114,23 +128,44 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  /// Aligns the top of the newest assistant reply with the top of the list so
+  /// the user reads it from the first paragraph instead of landing on its end.
+  void _scrollToReplyStart() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final replyContext = _replyKey.currentContext;
+      if (replyContext != null) {
+        Scrollable.ensureVisible(replyContext, alignment: 0);
+      }
+    });
+  }
+
   Future<void> _handleSend() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _isSending) return;
 
+    setState(() => _messages.add(_DisplayMessage(role: 'user', content: text)));
+    _controller.clear();
+    await _send(text);
+  }
+
+  /// Sends [text] (its bubble is already on screen). Also used to retry a
+  /// failed question without showing it twice.
+  Future<void> _send(String text) async {
     setState(() {
-      _messages.add(_DisplayMessage(role: 'user', content: text));
       _isSending = true;
       _errorMessage = null;
+      _retry = null;
     });
-    _controller.clear();
     _scrollToBottom();
 
+    var replied = false;
     try {
       final turn = await _chatService.sendMessage(text, conversationId: _conversationId);
       if (!mounted) return;
       setState(() {
         _conversationId = turn.conversationId;
+        _replyIndex = _messages.length;
+        replied = true;
         _messages.add(
           _DisplayMessage(
             role: turn.message.role,
@@ -141,11 +176,19 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _errorMessage = e.message);
+      setState(() {
+        _errorMessage = e.message;
+        _errorIsConnection = e is ApiConnectionException;
+        _retry = () => _send(text);
+      });
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
-    _scrollToBottom();
+    if (replied) {
+      _scrollToReplyStart();
+    } else {
+      _scrollToBottom();
+    }
   }
 
   Future<void> _openLink(Uri uri) async {
@@ -211,13 +254,25 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              message.content,
-              style: TextStyle(
-                fontSize: 13,
-                color: isUser ? Colors.white : AppColors.textPrimary,
+            if (isUser)
+              Text(
+                message.content,
+                style: const TextStyle(fontSize: 13, color: Colors.white),
+              )
+            else
+              MarkdownBody(
+                data: message.content,
+                styleSheet: MarkdownStyleSheet(
+                  p: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                  listBullet: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                  strong: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                  blockSpacing: 6,
+                ),
               ),
-            ),
             if (message.sources.isNotEmpty) ...[
               const SizedBox(height: 8),
               const Text(
@@ -258,7 +313,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pushNamed(AppRoutes.chatHistory),
-                  icon: const Icon(Icons.history),
+                  icon: const Icon(Symbols.history_rounded),
                   tooltip: 'Historial de conversaciones',
                 ),
               ],
@@ -306,14 +361,21 @@ class _ChatScreenState extends State<ChatScreen> {
                                   ),
                                 );
                               }
-                              return _buildBubble(_messages[index]);
+                              final bubble = _buildBubble(_messages[index]);
+                              return index == _replyIndex
+                                  ? KeyedSubtree(key: _replyKey, child: bubble)
+                                  : bubble;
                             },
                           ),
                   ),
                   if (_errorMessage != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: Text(_errorMessage!, style: const TextStyle(color: AppColors.error)),
+                      child: ErrorNotice(
+                        message: _errorMessage!,
+                        isConnection: _errorIsConnection,
+                        onRetry: _retry,
+                      ),
                     ),
                   Padding(
                     padding: const EdgeInsets.all(8),
@@ -331,7 +393,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         const SizedBox(width: 8),
                         IconButton(
                           onPressed: _canSend ? _handleSend : null,
-                          icon: const Icon(Icons.send),
+                          icon: const Icon(Symbols.send_rounded),
                           color: AppColors.primary,
                         ),
                       ],

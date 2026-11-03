@@ -15,15 +15,19 @@ class AuthFailure implements Exception {
 /// Holds Google Sign-In + HabitQ backend auth. Exposes plain [ChangeNotifier]
 /// state (no external state-management package) for the Login screen.
 class AuthService extends ChangeNotifier {
-  AuthService({ApiClient? apiClient, TokenStorage? tokenStorage})
-      : _apiClient = apiClient ?? ApiClient(),
+  AuthService({
+    ApiClient? apiClient,
+    TokenStorage? tokenStorage,
+    GoogleSignIn? googleSignIn,
+  })  : _apiClient = apiClient ?? ApiClient(),
         _tokenStorage = tokenStorage ?? const TokenStorage(),
-        _googleSignIn = GoogleSignIn(
-          serverClientId: AppConfig.googleClientId.isEmpty
-              ? null
-              : AppConfig.googleClientId,
-          scopes: const ['email'],
-        );
+        _googleSignIn = googleSignIn ??
+            GoogleSignIn(
+              serverClientId: AppConfig.googleClientId.isEmpty
+                  ? null
+                  : AppConfig.googleClientId,
+              scopes: const ['email'],
+            );
 
   final ApiClient _apiClient;
   final TokenStorage _tokenStorage;
@@ -84,6 +88,13 @@ class AuthService extends ChangeNotifier {
       await _apiClient.post('/auth/logout', const {});
     } on ApiException {
       // Ignored: local sign-out proceeds either way.
+    }
+    // Without this the plugin keeps the cached Google account and the next
+    // signIn() reuses it silently, never showing the account picker.
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {
+      // Ignored: the HabitQ session is discarded either way.
     }
     await _tokenStorage.delete();
   }

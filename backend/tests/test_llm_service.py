@@ -41,6 +41,12 @@ def test_build_prompt_includes_spanish_and_evidence_only_instructions() -> None:
     assert "evidencia" in prompt.lower()
 
 
+def test_build_prompt_restricts_markdown_formatting() -> None:
+    prompt = build_prompt("q", ["chunk"])
+    assert "encabezados" in prompt.lower()
+    assert "tablas" in prompt.lower()
+
+
 def test_build_prompt_with_empty_context_signals_no_evidence_available() -> None:
     empty_prompt = build_prompt("q", [])
     with_context_prompt = build_prompt("q", ["chunk"])

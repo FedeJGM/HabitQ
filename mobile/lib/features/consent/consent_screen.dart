@@ -11,7 +11,7 @@ Antes de continuar, es importante que sepas:
 • HabitQ no prescribe medicamentos ni tratamientos.
 • Las respuestas se basan en evidencia científica disponible y pueden no aplicar a tu situación particular.
 • Si tienes una condición de salud, síntomas que te preocupan o dudas médicas específicas, consulta a un profesional.
-• Guardamos tu perfil básico y los hábitos que registres únicamente para personalizar las recomendaciones. No compartimos esta información con terceros.
+• Guardamos tu perfil (rango de edad, género, altura, peso y objetivo principal) y los hábitos que registres únicamente para personalizar las recomendaciones. No compartimos esta información con terceros.
 • Puedes cerrar sesión en cualquier momento desde la pantalla de Inicio.
 
 Al continuar, confirmas que entendiste lo anterior y aceptas usar HabitQ como una herramienta de orientación, no como un servicio médico.''';

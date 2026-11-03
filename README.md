@@ -8,7 +8,7 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 
 **Backend (FastAPI)**
 - **Auth, perfil y hábitos:** `POST /auth/google`, `GET /auth/me`, `POST /auth/onboarding-complete`, `POST /auth/refresh`, `POST /auth/logout`, `GET/PUT /profile`, `GET/POST /habits`, `PUT /habits/{id}`.
-- **Tareas diarias:** `GET /tasks/catalog`, `GET /tasks?day=`, `POST /tasks`, `PUT /tasks/{id}`, `DELETE /tasks/{id}`, `PUT /tasks/{id}/progress`.
+- **Tareas diarias:** `GET /tasks/catalog`, `GET /tasks?day=`, `POST /tasks`, `PUT /tasks/{id}`, `DELETE /tasks/{id}`, `PUT /tasks/{id}/progress`, `GET /tasks/stats?day=` (cumplimiento de los últimos 7 días, D-28).
 - **Chat:** `POST /chat`, `GET /chat/conversations`, `GET /chat/conversations/{id}/messages`, `DELETE /chat/conversations/{id}`.
 - **Administración:** panel web en `GET /admin` más `POST /admin/discovery`, `GET /admin/candidates`, `POST /admin/candidates/{id}/approve`, `POST /admin/candidates/{id}/reject`, `POST /admin/ingest`, `GET /admin/documents` y `DELETE /admin/documents/{id}`.
 - Todos los endpoints privados exigen JWT válido (`get_current_user`). Los de `/admin` además exigen que el correo del usuario esté en `ADMIN_EMAILS` (`require_admin`): 401 sin sesión, 403 si no es admin.
@@ -18,6 +18,7 @@ Ver también [`docs/architecture/overview.md`](./docs/architecture/overview.md) 
 - Onboarding: perfil básico (edad + objetivo principal) + cuestionario de 9 preguntas por los 6 dominios de hábitos.
 - Home: saludo según la hora (de 19:00 a 04:59 «Es una gran noche», si no «Es un nuevo día»), cerrar sesión, navegación a Mis Hábitos y Perfil, y el chat: un botón único hasta la primera conversación; después «Continuar conversación» y «Nuevo chat con HabitQ».
 - Actividad: checklist diario por objetivo. Eliges tareas de un catálogo fijo para tu objetivo, las marcas (casilla o contador) y la lista parte en cero a tu medianoche; la franja semanal muestra días anteriores en solo lectura. Cada tarea puede tener un recordatorio local a la hora que elijas (notificación del propio teléfono, sin servidor). Ver `docs/decisions.md` D-23 a D-25.
+- Estadísticas: cumplimiento de las tareas de los últimos 7 días (barras por día, promedio de los contadores y mejor día) y un resumen de solo lectura de las respuestas del cuestionario de hábitos, sin evolución ni valoración. Ver `docs/decisions.md` D-28.
 - Mis Hábitos: ver y editar los hábitos ya registrados (autosave).
 - Perfil: ver y editar edad y objetivo principal (autosave).
 - Chat con HabitQ: conversación con IA respaldada por RAG, con referencias completas por cada respuesta (autores, año, revista, páginas y enlace DOI tocable) y personalización según perfil/hábitos cuando es relevante.
@@ -61,8 +62,8 @@ Completa `.env` con:
 | `DATABASE_URL` | backend | Cadena de conexión a tu PostgreSQL local |
 | `JWT_SECRET` | backend | Secreto para firmar el JWT HabitQ (cualquier string largo aleatorio) |
 | `GOOGLE_CLIENT_ID` | backend + mobile | **Web** Client ID de Google Cloud (ver sección "Credenciales de Google" abajo) |
-| `API_BASE_URL` | mobile | URL del backend. `http://10.0.2.2:8000` apunta al `localhost` de tu PC desde el emulador Android |
-| `GEMINI_API_KEY` | backend | API key de Gemini (`google-genai`). **Obligatoria**: el backend no arranca sin ella |
+| `API_BASE_URL` | mobile | URL del backend. `http://10.0.2.2:8000` apunta al `localhost` de tu PC desde el emulador Android. Con un celular físico sin cable USB se usa la dirección de Tailscale de la PC (D-27) |
+| `GEMINI_API_KEY` | backend | API key de Gemini (`google-genai`). **Obligatoria**: el backend no arranca sin ella. El modelo está fijo en `gemini-3.5-flash-lite` (D-26); que la clave sea gratuita o de pago es un asunto de facturación del proyecto de Google, no de la app |
 | `ADMIN_EMAILS` | backend | Correos de Google (separados por coma) con acceso a `/admin`. Vacía = nadie es admin |
 | `EMBEDDING_MODEL_NAME` | backend | Opcional. Modelo de embeddings (por defecto `intfloat/multilingual-e5-small`). Si lo cambias, hay que [reindexar](#4-migraciones) |
 | `RETRIEVAL_MIN_SCORE` | backend | Opcional. Similitud mínima para usar un fragmento como evidencia; vacía = sin umbral (ver D-19) |
@@ -189,7 +190,7 @@ Esto **no debería sobrescribir** `pubspec.yaml` ni `lib/` existentes (Flutter d
 flutter pub add google_sign_in http flutter_secure_storage url_launcher
 ```
 
-Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (116 tests).
+Ya ejecutado en esta máquina: `flutter analyze` no reporta issues y `flutter test` pasa (250 tests).
 
 ### 2.1 Build de Android
 
